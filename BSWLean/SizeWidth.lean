@@ -1,5 +1,6 @@
 import BSWLean.Treelike
 import BSWLean.TinyConversions
+import Mathlib.Data.Finset.Basic
 
 def TreeLikeResolution.width {vars} {φ : CNFFormula vars} :
     ∀ {c : Clause vars}, TreeLikeResolution φ c → Nat
@@ -82,6 +83,22 @@ lemma carry_through_convert {vars₁ vars₂} (c₁ c₂ : Clause vars₁) {h₁
   aesop
 
 @[simp]
+lemma carry_through_convert₂ {vars₁ vars₂} (c₁ c₂ : Clause vars₁) {h₁ h₂ h₃} :
+    ((c₁ ∪ c₂).convert vars₂ h₁) =
+    (c₁.convert vars₂ h₂) ∪ (c₂.convert vars₂ h₃) := by
+  unfold Clause.convert
+  aesop
+
+@[simp]
+lemma carry_through_convert_expl_lit (vars₁ vars₂) (c₁ : Clause vars₁)
+    (l : Literal vars₁) (h₁ h₂ h₃) :
+    ((c₁ ∪ {l}).convert vars₂ h₁) =
+    (c₁.convert vars₂ h₂) ∪ {(l.convert vars₂ h₃)} := by
+  unfold Clause.convert
+  aesop
+
+
+@[simp]
 lemma carry_through_convert_trivial {vars₁ vars₂} (c₁ c₂ : Clause vars₁) {h₁ h₂} :
     ((c₁ ∪ c₂).convert_trivial vars₂ h₁) =
     (c₁.convert_trivial vars₂ h₂) ∪ (c₂.convert_trivial vars₂ h₂) := by
@@ -94,6 +111,219 @@ lemma cup_subset_cup {α} [DecidableEq α] (a b c d : Finset α) (h : a ⊆ c) (
 
 lemma remove_middle_subset {α} [DecidableEq α] (a b c d : Finset α) (h : a ⊆ b ∪ d) :
     a ⊆ b ∪ c ∪ d := by grind
+
+lemma subset_of_vars_clause (vars₁ vars₂) (c : Clause vars₁) (h : vars₁ ⊆ vars₂) :
+    ∀ l ∈ c, l.variable ∈ vars₂ := by aesop
+
+
+
+lemma inter_idea_new_version (vars sub_vars) (lit : Literal (vars \ sub_vars))
+    (ρ : Assignment sub_vars) (c_1 c_2 : Clause (vars \ sub_vars))
+    (inter_proof : Finset.disjUnion (vars \ sub_vars) sub_vars (Finset.sdiff_disjoint
+      : Disjoint (vars \ sub_vars) sub_vars) = vars)
+    (var_incl : lit.variable ∈ vars)
+    (left : c_2 ⊆ c_1 ∪ {lit}):
+    ((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) ⊆
+    ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) ∪ {lit.convert vars var_incl} := by
+  have h_subset : sub_vars ⊆ vars := by aesop
+  have : Clause.convert {lit} vars
+      (by intro l h_l; have q := Literal.variable_mem_vars l; aesop) =
+      {lit.convert vars var_incl} := by
+    unfold Clause.convert
+    simp only [Finset.mem_singleton]
+    aesop
+  rw [←this]
+  have fact : (Finset.disjUnion (vars \ sub_vars) sub_vars
+      (Finset.sdiff_disjoint : Disjoint (vars \ sub_vars) sub_vars)) = vars := by
+    aesop
+  unfold Clause.combine
+  unfold Clause.convert_trivial
+  simp only [carry_through_convert, Finset.union_assoc]
+  apply Finset.union_subset
+  swap
+  · grind
+  rw [←Finset.union_assoc]
+  apply remove_middle_subset
+  rw [this]
+  have fact₁ : (vars \ sub_vars) ⊆ vars := by aesop
+  have fact₂ : ∀ l ∈ c_2, l.variable ∈ vars := by
+    exact fun l a ↦
+      subset_of_vars_clause (vars \ sub_vars) vars (c_1 ∪ {lit}) fact₁ l (left a)
+  have fact₃ : ∀ l ∈ c_1, l.variable ∈ vars := by
+    exact fun l a ↦ subset_of_vars_clause (vars \ sub_vars) vars c_1 fact₁ l a
+  have fact₄ : ∀ l ∈ (c_1 ∪ {lit}), l.variable ∈ vars := by
+    exact fun l a ↦
+      subset_of_vars_clause (vars \ sub_vars) vars (c_1 ∪ {lit}) fact₁ l a
+  have fact₅ : ∀ l ∈ (c_1 ∪ {lit}), l.variable ∈ (vars \ sub_vars) := by
+    exact fun l a ↦
+      subset_of_vars_clause (vars \ sub_vars) (vars \ sub_vars) (c_1 ∪ {lit})
+        (fun ⦃a⦄ a_1 ↦ a_1) l a
+  have fact₅ : (lit).variable ∈ vars := by
+    aesop
+  trans c_2.convert vars fact₂
+  · aesop
+  trans ((c_1 ∪ {lit}).convert vars fact₄)
+  · aesop
+  trans (c_1.convert  vars fact₃) ∪ {lit.convert vars var_incl}
+  trans (c_1.convert  vars fact₃) ∪ {((lit).convert vars fact₅)}
+  have final_idea : ((lit).convert vars fact₅) = lit.convert vars var_incl := by
+    aesop
+  refine Finset.subset_of_eq ?_
+  exact carry_through_convert_expl_lit (vars \ sub_vars) vars c_1 (lit) fact₄ fact₃ (by aesop)
+  · aesop
+  aesop
+
+
+lemma Resolve_ineq (vars sub_vars) (φ : CNFFormula vars) (var : Variable)
+    (ρ : Assignment sub_vars) (c c_1 c_2 c_3 : Clause (vars \ sub_vars))
+    (h_subset : sub_vars ⊆ vars)
+    (h_4 : var ∈ vars \ sub_vars) (h_0 : var ∉ c_1.variables)
+    (p_1 : TreeLikeResolution (φ.substitute ρ) c_2)
+    (p_2 : TreeLikeResolution (φ.substitute ρ) c_3)
+    (left : c_2 ⊆ c_1 ∪ {var.toLiteral h_4})
+    (right : c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4}):
+    Finset.card ((TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2
+    (⟨left, right⟩ : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧ c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4})).unsubstitute_rhs h_subset) ≤
+    max (Finset.card c_1) (max p_1.width p_2.width) + Finset.card sub_vars := by
+  unfold TreeLikeResolution.unsubstitute_rhs
+  simp
+  have inter_proof : Finset.disjUnion (vars \ sub_vars) sub_vars (Finset.sdiff_disjoint : Disjoint (vars \ sub_vars) sub_vars) = vars := by
+    aesop
+  have var_incl : var ∈ vars := by
+    grind
+  have idea₁ : (p_1.unsubstitute_rhs h_subset) ⊆
+    (Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (inter_proof)
+    := by
+    exact TreeLikeResolution.unsubstitute_rhs_variables p_1 h_subset
+  have idea₂ : (p_2.unsubstitute_rhs h_subset) ⊆
+    (Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (inter_proof)
+    := by
+    exact TreeLikeResolution.unsubstitute_rhs_variables p_2 h_subset
+
+  trans Finset.card (((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof).resolve
+    ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) var (Finset.sdiff_subset h_4 : var ∈ vars))
+
+  have inter_idea :
+    ((p_1.unsubstitute_rhs h_subset).resolve (p_2.unsubstitute_rhs h_subset) var (Finset.sdiff_subset h_4 : var ∈ vars)) ⊆
+    (((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof).resolve
+    ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) var (Finset.sdiff_subset h_4 : var ∈ vars)) := by
+    exact
+      resolve_subsets var vars (p_1.unsubstitute_rhs h_subset) (p_2.unsubstitute_rhs h_subset)
+        ((c_2.combine ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof)
+        ((c_3.combine ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof)
+        (Finset.sdiff_subset h_4) idea₁ idea₂
+
+  exact Finset.card_le_card inter_idea
+  trans Finset.card c_1 + Finset.card sub_vars
+  trans Finset.card ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof)
+  have temp₁ : Finset.disjUnion (vars \ sub_vars) sub_vars (Finset.sdiff_disjoint : Disjoint (vars \ sub_vars) sub_vars) = vars := by
+    aesop
+
+  have idea₃ : ((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) ⊆
+    ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) ∪ {var.toLiteral var_incl} := by
+    exact inter_idea_new_version vars sub_vars (var.toLiteral h_4) ρ c_1 c_2 inter_proof var_incl left
+
+  have idea₄ : ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) ⊆
+    ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars inter_proof) ∪ {var.toNegLiteral var_incl} := by
+    exact inter_idea_new_version vars sub_vars (var.toNegLiteral h_4) ρ c_1 c_3 inter_proof var_incl right
+
+  simp only [ge_iff_le]
+
+  apply resolve_subsets_trick var vars ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars temp₁)
+    ((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars temp₁)
+    ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars temp₁)
+    (by grind) idea₃ idea₄
+  exact card_combination c c_1
+  simp_all only [add_le_add_iff_right, le_sup_left]
+
+
+lemma resolve_width_case (vars sub_vars) (φ : CNFFormula vars) (var : Variable)
+    (ρ : Assignment sub_vars) (c c_1 c_2 c_3 : Clause (vars \ sub_vars))
+    (h_subset : sub_vars ⊆ vars)
+    (h_4 : var ∈ vars \ sub_vars) (h_0 : var ∉ c_1.variables)
+    (p_1 : TreeLikeResolution (φ.substitute ρ) c_2)
+    (p_2 : TreeLikeResolution (φ.substitute ρ) c_3)
+    (c₁ c₂ : Clause vars)
+    (π₁ : TreeLikeResolution φ c₁)
+    (π₂ : TreeLikeResolution φ c₂)
+    (left : c_2 ⊆ c_1 ∪ {var.toLiteral h_4})
+    (right : c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4})
+    (v : Variable)
+    (h_v_mem_vars : v ∈ vars)
+    (h_v_not_mem_c : v ∉ ((TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2
+      (⟨left, right⟩ : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧ c_3 ⊆ c_1 ∪
+      {var.toNegLiteral h_4})).unsubstitute_rhs h_subset).variables)
+    (left_1 : c₁ ⊆ (TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2
+      (⟨left, right⟩ : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧
+      c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4})).unsubstitute_rhs h_subset ∪ {v.toLiteral h_v_mem_vars})
+    (right_1 : c₂ ⊆
+      (TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2
+      (⟨left, right⟩ : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧
+      c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4})).unsubstitute_rhs h_subset ∪ {v.toNegLiteral h_v_mem_vars})
+    (heq : (TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2
+      (⟨left, right⟩ : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧ c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4})).unsubstitute h_subset =
+      TreeLikeResolution.resolve c₁ c₂ v h_v_mem_vars h_v_not_mem_c π₁ π₂ (⟨left_1, right_1⟩ : c₁ ⊆ (TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2
+      (⟨left, right⟩ : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧ c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4})).unsubstitute_rhs h_subset ∪ {v.toLiteral h_v_mem_vars} ∧
+      c₂ ⊆
+      (TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2 (⟨left, right⟩ : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧ c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4}
+      )).unsubstitute_rhs h_subset ∪ {v.toNegLiteral h_v_mem_vars}))
+    (h_2 : (p_1.unsubstitute h_subset).width ≤ p_1.width + Finset.card sub_vars)
+    (h_3 : (p_2.unsubstitute h_subset).width ≤ p_2.width + Finset.card sub_vars):
+    (π₁.width ≤ max (Finset.card c_1) (max p_1.width p_2.width) + Finset.card sub_vars) ∧
+      (π₂.width ≤ max (Finset.card c_1) (max p_1.width p_2.width) + Finset.card sub_vars)
+    := by
+
+    constructor
+
+    trans p_1.width + Finset.card sub_vars
+    trans (p_1.unsubstitute h_subset).width
+    unfold TreeLikeResolution.unsubstitute at heq
+    simp at heq
+    obtain ⟨heq₁, heq₂, heq₃, heq₄, heq₅⟩ := heq
+    subst heq₁ heq₂ heq₃
+    simp_all only [heq_eq_eq, Finset.union_singleton, le_refl]
+    exact h_2
+    simp
+
+    trans p_2.width + Finset.card sub_vars
+    trans (p_2.unsubstitute h_subset).width
+    unfold TreeLikeResolution.unsubstitute at heq
+    simp at heq
+    obtain ⟨heq₁, heq₂, heq₃, heq₄, heq₅⟩ := heq
+    subst heq₁ heq₂ heq₃
+    simp_all only [heq_eq_eq, Finset.union_singleton, le_refl]
+    exact h_3
+    simp
+
+
+
+lemma induction_step_width_incr {vars sub_vars} {φ : CNFFormula vars} {var : Variable}
+    {ρ : Assignment sub_vars} (c c_1 c_2 c_3 : Clause (vars \ sub_vars))
+    (h_subset : sub_vars ⊆ vars)
+    (h_4 : var ∈ vars \ sub_vars) (h_0 : var ∉ c_1.variables)
+    (p_1 : TreeLikeResolution (φ.substitute ρ) c_2)
+    (p_2 : TreeLikeResolution (φ.substitute ρ) c_3)
+    (h_1 : c_2 ⊆ c_1 ∪ {var.toLiteral h_4} ∧ c_3 ⊆ c_1 ∪ {var.toNegLiteral h_4})
+    (h_2 : (p_1.unsubstitute h_subset).width ≤ p_1.width + Finset.card sub_vars)
+    (h_3 : (p_2.unsubstitute h_subset).width ≤ p_2.width + Finset.card sub_vars) :
+    ((TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2 h_1).unsubstitute h_subset).width ≤
+    (TreeLikeResolution.resolve c_2 c_3 var h_4 h_0 p_1 p_2 h_1).width + Finset.card sub_vars := by
+  unfold TreeLikeResolution.width
+  obtain ⟨left, right⟩ := h_1
+  split
+  next x x_1 h_c_in_φ heq =>
+    exact Resolve_ineq vars sub_vars φ var ρ c c_1 c_2 c_3 h_subset h_4 h_0 p_1 p_2 left right
+  next x x_1 c₁ c₂ v h_v_mem_vars π₁ π₂ h_v_not_mem_c h_resolve
+    heq =>
+    simp_all only [sup_le_iff]
+    obtain ⟨left_1, right_1⟩ := h_resolve
+    apply And.intro
+    · exact Resolve_ineq vars sub_vars φ var ρ c c_1 c_2 c_3 h_subset h_4 h_0 p_1 p_2 left right
+    · apply resolve_width_case vars sub_vars φ
+          var ρ c c_1 c_2 c_3 h_subset h_4 h_0 p_1
+          p_2 c₁ c₂ π₁ π₂ left right v h_v_mem_vars h_v_not_mem_c
+          left_1 right_1 heq h_2 h_3
+
 
 
 lemma unsub_increase_width {vars sub_vars} {φ : CNFFormula vars}
@@ -110,123 +340,7 @@ lemma unsub_increase_width {vars sub_vars} {φ : CNFFormula vars}
       exact TreeLikeResolution.unsubstitute_rhs_variables (TreeLikeResolution.axiom_clause h) h_subset
     exact card_combination c C
   case resolve c_1 c_2 c_3 var h_4 h_0 p_1 p_2 h_1 h_2 h_3 =>
-    unfold TreeLikeResolution.width
-    obtain ⟨left, right⟩ := h_1
-    split
-    next x x_1 h_c_in_φ heq =>
-      unfold TreeLikeResolution.unsubstitute_rhs
-      simp
-      -- have idea₁ : Finset.card (p_1.unsubstitute_rhs h_subset) ≤ Finset.card c_2 + Finset.card sub_vars := by
-      --   have inter_idea₁ : (p_1.unsubstitute_rhs h_subset) ⊆
-      --     (Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)
-      --     := by
-      --     exact TreeLikeResolution.unsubstitute_rhs_variables p_1 h_subset
-      --   have inter_idea₂ :
-      --     Finset.card ((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) ≤
-      --     Finset.card c_2 + Finset.card sub_vars
-      --     := by
-      --     exact card_combination c c_2
-      --   trans Finset.card ((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop))
-      --   exact Finset.card_le_card inter_idea₁
-      --   exact inter_idea₂
-      -- have idea₂ : Finset.card (p_2.unsubstitute_rhs h_subset) ≤ Finset.card c_3 + Finset.card sub_vars := by
-      --   have inter_idea₁ : (p_2.unsubstitute_rhs h_subset) ⊆
-      --     (Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)
-      --     := by
-      --     exact TreeLikeResolution.unsubstitute_rhs_variables p_2 h_subset
-      --   have inter_idea₂ :
-      --     Finset.card ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) ≤
-      --     Finset.card c_3 + Finset.card sub_vars
-      --     := by
-      --     exact card_combination c c_3
-      --   trans Finset.card ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop))
-      --   exact Finset.card_le_card inter_idea₁
-      --   exact inter_idea₂
-      have idea₁ : (p_1.unsubstitute_rhs h_subset) ⊆
-        (Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)
-        := by
-        exact TreeLikeResolution.unsubstitute_rhs_variables p_1 h_subset
-      have idea₂ : (p_2.unsubstitute_rhs h_subset) ⊆
-        (Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)
-        := by
-        exact TreeLikeResolution.unsubstitute_rhs_variables p_2 h_subset
-
-      trans Finset.card (((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)).resolve
-        ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) var (Finset.sdiff_subset h_4 : var ∈ vars))
-
-      have inter_idea :
-        ((p_1.unsubstitute_rhs h_subset).resolve (p_2.unsubstitute_rhs h_subset) var (Finset.sdiff_subset h_4 : var ∈ vars)) ⊆
-        (((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)).resolve
-        ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) var (Finset.sdiff_subset h_4 : var ∈ vars)) := by
-        exact
-          resolve_subsets var vars (p_1.unsubstitute_rhs h_subset) (p_2.unsubstitute_rhs h_subset)
-            ((c_2.combine ρ.toClause Finset.sdiff_disjoint).convert_trivial vars
-              (of_eq_true
-                (Eq.trans
-                  (Eq.trans
-                    (congrArg (fun x ↦ x = vars)
-                      (Eq.trans
-                        (Finset.disjUnion_eq_union (vars \ sub_vars) sub_vars Finset.sdiff_disjoint)
-                        Finset.sdiff_union_self_eq_union))
-                    Finset.union_eq_left._simp_1)
-                  (eq_true h_subset))))
-            ((c_3.combine ρ.toClause Finset.sdiff_disjoint).convert_trivial vars
-              (of_eq_true
-                (Eq.trans
-                  (Eq.trans
-                    (congrArg (fun x ↦ x = vars)
-                      (Eq.trans
-                        (Finset.disjUnion_eq_union (vars \ sub_vars) sub_vars Finset.sdiff_disjoint)
-                        Finset.sdiff_union_self_eq_union))
-                    Finset.union_eq_left._simp_1)
-                  (eq_true h_subset))))
-            (Finset.sdiff_subset h_4) idea₁ idea₂
-      exact Finset.card_le_card inter_idea
-      trans Finset.card c_1 + Finset.card sub_vars
-      trans Finset.card ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop))
-      have temp₁ : Finset.disjUnion (vars \ sub_vars) sub_vars (Finset.sdiff_disjoint : Disjoint (vars \ sub_vars) sub_vars) = vars := by
-        aesop
-      have idea₃ : ((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) ⊆
-        ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) ∪ {var.toLiteral (by grind)} := by
-        have : Clause.convert {var.toLiteral h_4} vars
-            (by intro l h_l; have q := Literal.variable_mem_vars l; aesop) =
-            {var.toLiteral (by grind)} := by
-          unfold Clause.convert
-          simp only [Finset.mem_singleton]
-          aesop
-        rw [←this]
-        unfold Clause.combine
-        unfold Clause.convert_trivial
-        simp only [Finset.disjUnion_eq_union, Finset.sdiff_union_self_eq_union, Finset.mem_union,
-          Literal.variable_mem_vars, or_true, implies_true, carry_through_convert,
-          Clause.convert_convert, Finset.union_assoc]
-        apply Finset.union_subset
-        swap
-        · grind
-        rw [←Finset.union_assoc]
-        apply remove_middle_subset
-        unfold Clause.convert
-        grind
-
-      have idea₄ : ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) ⊆
-        ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars (by aesop)) ∪ {var.toNegLiteral (by grind)} := by
-        sorry
-      simp only [ge_iff_le]
-      apply resolve_subsets_trick var vars ((Clause.combine c_1 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars temp₁)
-        ((Clause.combine c_2 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars temp₁)
-        ((Clause.combine c_3 ρ.toClause Finset.sdiff_disjoint).convert_trivial vars temp₁)
-        (by grind) idea₃ idea₄
-      exact card_combination c c_1
-      simp_all only [add_le_add_iff_right, le_sup_left]
-    next x x_1 c₁ c₂ v h_v_mem_vars π₁ π₂ h_v_not_mem_c h_resolve
-      heq =>
-      simp_all only [sup_le_iff]
-      obtain ⟨left_1, right_1⟩ := h_resolve
-      apply And.intro
-      · sorry
-      · apply And.intro
-        · sorry
-        · sorry
+    exact induction_step_width_incr c_2 c_1 c_2 c_3 h_subset h_4 h_0 p_1 p_2 h_1 h_2 h_3
 
 
 
