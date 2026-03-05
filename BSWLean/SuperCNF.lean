@@ -212,6 +212,15 @@ def Clause.convert {vars₁ : Variables} (c : Clause vars₁) (vars₂ : Variabl
 
   c.filterMap q this
 
+def CNFFormula.simple_convert (vars₁ : Variables) (vars₂ : Variables) (φ : CNFFormula vars₁)
+    (h_subs : vars₁ ⊆ vars₂) : CNFFormula vars₂ :=
+  φ.image (fun c =>
+  c.convert vars₂ (by
+    intro l a
+    apply h_subs
+    simp_all only [Literal.variable_mem_vars])
+  )
+
 def Clause.convert_trivial {vars₁ : Variables} (c : Clause vars₁) (vars₂ : Variables)
     (h_mem : vars₁ = vars₂) : Clause vars₂ :=
   c.convert vars₂ (by aesop)
