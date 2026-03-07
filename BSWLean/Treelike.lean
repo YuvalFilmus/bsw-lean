@@ -197,6 +197,11 @@ def TreeLikeResolution.size {vars} {φ : CNFFormula vars} :
   | _, .axiom_clause _ => 1
   | _, .resolve _ _ _ _ _ π₁ π₂ _ => 1 + size π₁ + size π₂
 
+def TreeLikeResolution.width {vars} {φ : CNFFormula vars} :
+    ∀ {c : Clause vars}, TreeLikeResolution φ c → Nat
+  | C, .axiom_clause _ => C.card
+  | C, .resolve _ _ _ _ _ π₁ π₂ _ => max C.card (max (width π₁) (width π₂))
+
 noncomputable def TreeLikeResolution.unsubstitute_rhs {vars sub_vars} {c} {φ : CNFFormula vars}
     (ρ : Assignment sub_vars) (π : TreeLikeResolution (φ.substitute ρ) c)
     (h_subset : sub_vars ⊆ vars) : Clause vars :=

@@ -2,10 +2,83 @@ import BSWLean.Treelike
 import BSWLean.TinyConversions
 import Mathlib.Data.Finset.Basic
 
-def TreeLikeResolution.width {vars} {φ : CNFFormula vars} :
-    ∀ {c : Clause vars}, TreeLikeResolution φ c → Nat
-  | C, .axiom_clause _ => C.card
-  | C, .resolve _ _ _ _ _ π₁ π₂ _ => max C.card (max (width π₁) (width π₂))
+
+
+
+lemma lit_subst_is_Bot_false {vars}
+    (l : Literal vars)
+    (ρ_false : (Assignment ({l.variable} : Finset Variable)))
+    (h_value : ρ_false = (fun _ _ => (¬l.polarity : Bool))) :
+    ({l} : Clause vars).substitute ρ_false = BotClause (vars \ {l.variable}):= by
+
+  unfold BotClause
+  unfold Clause.substitute
+  aesop
+  have : l.variable ∈ (vars ∩ {l.variable}) := by
+    aesop
+  let l' : Literal (vars ∩ {l.variable}) := l.convert (vars ∩ {l.variable}) this
+  have : (({l} : Clause vars).split {l.variable}).1 = ({l'} : Clause ((vars) ∩ {l.variable})) := by
+    unfold Clause.split
+    aesop
+    unfold Literal.convert
+    aesop
+    unfold Clause.shrink
+    aesop
+    unfold Clause.shrink
+    aesop
+  aesop
+  unfold Literal.convert
+  aesop
+  unfold Clause.split
+  aesop
+  unfold Clause.shrink
+  aesop
+
+
+
+lemma shrink_width_ineq {vars} {sub_vars} (ρ : Assignment sub_vars)
+    (C : Clause (vars)) {h}
+    : Finset.card (Clause.shrink C (vars \ sub_vars) h) ≤ C.card := by
+    unfold Clause.shrink
+    simp_all only [filterMap_card]
+
+
+lemma shrink_width_ineq_adv {vars} {sub_vars} (ρ : Assignment sub_vars)
+    (C : Clause (vars)) {h}
+    : Finset.card (Clause.shrink ({l ∈ C | l.variable ∉ sub_vars}) (vars \ sub_vars) h) ≤ Finset.card C := by
+    trans Finset.card ({l ∈ C | l.variable ∉ sub_vars})
+    exact shrink_width_ineq ρ ({l ∈ C | l.variable ∉ sub_vars})
+    exact Finset.card_filter_le C fun l ↦ l.variable ∉ sub_vars
+
+
+lemma card_subst {vars} {sub_vars} {ρ : Assignment sub_vars}
+    (C : Clause (vars))
+    : (C.substitute ρ = none) ∨
+    (∃ c_res, C.substitute ρ = some c_res ∧ Finset.card c_res
+    ≤ Finset.card C) := by
+  cases h : C.substitute ρ with
+  | none =>
+      -- Case 1: C.substitute ρ = none
+      apply Or.inl
+      rfl
+  | some c_res =>
+      -- Case 2: C.substitute ρ = some c_res
+      apply Or.inr
+      use c_res
+      constructor
+      · rfl
+      · unfold Clause.substitute at h
+        simp_all
+        obtain ⟨h_left, h_right⟩ := h
+        subst h_right
+        unfold Clause.split
+        aesop
+        have h : ∀ l ∈ {l ∈ C | l.variable ∉ sub_vars}, l.variable ∈ vars \ sub_vars := by
+          aesop
+        have : Finset.card (Clause.shrink ({l ∈ C | l.variable ∉ sub_vars}) (vars \ sub_vars) h) ≤ Finset.card C := by
+          exact shrink_width_ineq_adv ρ C
+        simp_all only
+
 
 lemma card_combination {vars} {sub_vars} {ρ : Assignment sub_vars}
     (c : Clause (vars \ sub_vars)) (C : Clause (vars \ sub_vars)) {h₁ h₂}
@@ -676,111 +749,6 @@ lemma width_respect_convert (vars₁ vars₂) (φ : CNFFormula vars₁)
 
 
 
-lemma resolution_restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
-    (h_subs : vars₁ ⊆ vars₂) (ρ : Assignment vars₁)
-    {C : Clause vars₂} (π : TreeLikeResolution φ C) :
-    (C.substitute ρ = none) ∨
-    (∃ c_res, C.substitute ρ = some c_res ∧
-      ∃ c', c' ⊆ c_res ∧
-      ∃ (π' : TreeLikeResolution (φ.substitute ρ) c'),
-        π'.width ≤ π.width ∧ π'.size ≤ π.size) := by
-  induction π with
-  | axiom_clause h_in =>
-      -- Look at c.substitute ρ.
-      -- If none, return Or.inl.
-      -- If some c_res, c_res is in the new formula by definition of CNFFormula.substitute.
-      unfold Clause.substitute
-      sorry
-  | resolve c₁ c₂ v h_v_mem h_v_not_mem π₁ π₂ h_res ih₁ ih₂ =>
-      -- Check if v ∈ vars₁ (assigned) or v ∉ vars₁ (unassigned).
-      -- If assigned, one of ih₁ or ih₂ will evaluate to `none`, and the other
-      -- will shrink and bypass the resolution step entirely!
-      -- If unassigned, apply resolution to the results of ih₁ and ih₂.
-      sorry
-
-lemma width_and_size_respect_substitution {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
-    (x : Literal vars₂) (h₀ : x.variable ∈ vars₂) (h_subs : vars₁ ⊆ vars₂)
-    (ρ : (Assignment vars₁))
-    (W : ℕ) (S : ℕ)
-    (π : TreeLikeResolution φ (BotClause vars₂)) (h_width : π.width ≤ W) (h_size : π.size ≤ S) :
-    ∃ (π_1 : TreeLikeResolution (φ.substitute ρ) (BotClause (vars₂ \ vars₁))), (π_1.width ≤ W ∧ π_1.size ≤ S) := by
-
-  -- 1. Apply the generalized induction lemma
-  have h_gen := resolution_restrict h_subs ρ π
-
-  -- 2. Handle the two cases from the generalized lemma
-  rcases h_gen with h_none | ⟨c_res, h_some, c', h_subset, π', h_w, h_s⟩
-
-  · -- Case 1: BotClause was satisfied (Impossible)
-    -- You will need a helper lemma: `BotClause.substitute ρ ≠ none`
-    -- Once you have it, this branch closes by contradiction.
-    sorry
-
-  · -- Case 2: We got a restricted proof
-    -- You need a helper lemma showing that `BotClause.substitute ρ = some (BotClause (vars₂ \ vars₁))`
-    -- From `h_some`, you can deduce `c_res = BotClause (vars₂ \ vars₁)`
-    -- From `h_subset`, `c' ⊆ BotClause (vars₂ \ vars₁)`, meaning `c' = BotClause (vars₂ \ vars₁)`
-
-
-    have : c' = BotClause (vars₂ \ vars₁) :=
-      sorry
-    subst c'
-    -- Once you rewrite c' to BotClause, π' is exactly the TreeLikeRefutation you need!
-    use π'  -- Wait to do this until Lean sees π' derives BotClause
-
-    -- Prove the bounds using transitivity
-    constructor
-    · exact Nat.le_trans h_w h_width
-    · exact Nat.le_trans h_s h_size
-
-
-lemma substitute_trivial_property {vars}
-    (φ : CNFFormula vars)
-    (x : Literal vars) (h₀ : x.variable ∈ vars)
-    (C_0 : Clause vars)
-    (h_subs : (vars \ {x.variable}) ⊆ vars)
-    (ρ_false : (Assignment ({x.variable} : Finset Variable)))
-    (h_value_false : ρ_false = (fun _ _ => (¬x.polarity : Bool)))
-    (h_c : C_0 ∈ ((CNFFormula.simple_convert
-        (vars \ {x.variable}) vars (φ.substitute ρ_false) h_subs)))
-    (C_1 : Clause (vars \ {x.variable}))
-    (h_C_1_conv_left : C_1 ∈ (φ.substitute ρ_false))
-    (h_incl : ∀ l ∈ C_1, l.variable ∈ vars)
-    (h_C_1_conv_right : C_1.convert vars h_incl = C_0)
-    (C_2 : Clause vars)
-    (h_C_2_conv : C_2 ∈ φ ∧ C_2.substitute ρ_false = some C_1)
-    : C_2 ⊆ C_0 ∪ ({x} : Clause vars) := by
-  intro l hl
-
-  obtain ⟨left, right⟩ := h_C_2_conv
-  rw [← h_C_1_conv_right]
-
-
-  -- 3. Since l ∈ C_1.convert, there must be a source literal l' ∈ C_1
-  -- You'll likely need to unfold Clause.convert or use a lemma like 'mem_convert'
-  unfold Clause.convert
-  simp
-  by_cases l = x
-  case pos h_l =>
-    exact Or.symm (Or.inr h_l)
-  case neg h_l =>
-    refine Or.symm (Or.intro_left (l = x) ?_)
-    unfold Clause.substitute at right
-    simp at right
-    obtain ⟨h_sp_l, h_sp_r⟩ := right
-    -- aesop
-    -- unfold Clause.split
-    -- aesop
-    -- unfold Clause.shrink
-    -- aesop
-    -- unfold Clause.split at h_c
-    -- aesop
-    -- unfold Clause.shrink at h_c
-    -- aesop
-    -- unfold Clause.convert at h_c
-    -- simp at h_c
-    sorry
-
 
 
 
@@ -1145,7 +1113,7 @@ lemma axiom_if_none {vars} {φ : CNFFormula vars} {c : Clause vars} (π : TreeLi
       -- This contradicts our assumption 'h_none' (some v = none).
       simp [getRootVariable] at h_none
 
-theorem root_var_in_vars {vars} {φ : CNFFormula vars} {c : Clause vars}
+lemma root_var_in_vars {vars} {φ : CNFFormula vars} {c : Clause vars}
     (π : TreeLikeResolution φ c) (v : Variable) :
     getRootVariable π = some v → v ∈ vars := by
   intro h_get
@@ -1161,7 +1129,7 @@ theorem root_var_in_vars {vars} {φ : CNFFormula vars} {c : Clause vars}
       rw [← h_get]
       exact h_v_in_vars
 
-theorem size_split {a b k : ℕ} (h : a + b ≤ k + k) : a ≤ k ∨ b ≤ k := by
+lemma size_split {a b k : ℕ} (h : a + b ≤ k + k) : a ≤ k ∨ b ≤ k := by
   -- Use proof by contradiction
   by_contra h_both
   -- Push the negation: ¬(a ≤ k ∨ b ≤ k) becomes (a > k ∧ b > k)
@@ -1178,22 +1146,70 @@ theorem size_split {a b k : ℕ} (h : a + b ≤ k + k) : a ≤ k ∨ b ≤ k := 
 
 
 
+
+lemma eliminate_vacuous_resolutions {vars} {φ : CNFFormula vars} -- {c : Clause vars}
+    (π : TreeLikeResolution φ (BotClause vars)) :
+    ∃ (π' : TreeLikeResolution φ (BotClause vars)), IsRegularRes π' ∧ π'.size ≤ π.size := by
+
+  have : ∃ (c' : Clause vars) (π' : TreeLikeResolution φ c'), (c' ⊆ (BotClause vars)) ∧ IsRegularRes π' ∧ π'.size ≤ π.size := by
+    exact eliminate_vacuous_resolutions_prep π
+  obtain ⟨c', h_π⟩ := this
+  obtain ⟨π', h_π⟩ := h_π
+  have idea : c' = (BotClause vars) := by
+    simp_all only [Finset.subset_empty]
+  subst c'
+  simp_all only [subset_refl, true_and]
+  obtain ⟨left, right⟩ := h_π
+  apply Exists.intro
+  · apply And.intro
+    on_goal 2 => { exact right
+    }
+    · simp_all only
+
+
+lemma var_incl {vars} (v : Variable) (C : Clause vars) (h_v_in_vars : v ∈ vars)
+  (h_sub : v ∈ C.variables) :
+  {v.toLiteral h_v_in_vars} ⊆ C ∨ {v.toNegLiteral h_v_in_vars} ⊆ C := by
+  unfold Clause.variables at h_sub
+  unfold Literal.variable at h_sub
+  simp_all
+  obtain ⟨a, h_sub⟩ := h_sub
+  obtain ⟨h_sub_left, h_sub_right⟩ := h_sub
+  cases a
+  case pos var h_v =>
+    have : Literal.pos var h_v = v.toLiteral h_v_in_vars := by
+      subst h_sub_right
+      simp_all only
+      rfl
+    subst h_sub_right
+    simp_all only [true_or]
+  case neg var h_v =>
+    have : Literal.neg var h_v = v.toNegLiteral h_v_in_vars := by
+      subst h_sub_right
+      simp_all only
+      rfl
+    subst h_sub_right
+    simp_all only [or_true]
+
+
 theorem width_imply_size_ind_version (W : ℕ)
-    (W_c : ℕ)
-    (h_ineq : W > W_c) :
+    (W_c : ℕ) :
+    --(h_ineq : W > W_c) :
     --(h_size : π.size ≤ 2 ^ (W - W_c)) :
     ∀ (vars) (φ : CNFFormula vars) (h_clause_card : ∀ C ∈ φ, C.card ≤ W_c) (π : TreeLikeRefutation φ),
-      π.size ≤ 2 ^ (W - W_c) →
-      ∃ (π' : TreeLikeRefutation φ), π'.width ≤ W := by
-
-
+      π.size ≤ 2 ^ (W) →
+      ∃ (π' : TreeLikeRefutation φ), π'.width ≤ W + W_c:= by
 
   induction W using Nat.strong_induction_on with
   | h W ih_0 =>
     intro vars φ h_clause_card
-    intro π h_size
+    intro π_0 h_0_size
+
     induction vars using Finset.strongInductionOn
     case a s ih =>
+      have h_reg : ∃ (π : TreeLikeResolution φ (BotClause s)), IsRegularRes π ∧ π.size ≤ π_0.size := by
+        exact eliminate_vacuous_resolutions π_0
+      obtain ⟨π, h_reg⟩ := h_reg
       by_cases (getRootVariable π = none)
       case pos h_x =>
         have : ∃ (h_c_in_φ : (BotClause s) ∈ φ), π = TreeLikeResolution.axiom_clause h_c_in_φ := by
@@ -1204,6 +1220,23 @@ theorem width_imply_size_ind_version (W : ℕ)
         subst h_C
         simp_all only [gt_iff_lt, Finset.card_empty, zero_le]
       case neg h_xx =>
+
+        obtain ⟨h_reg, h_size_trans⟩ := h_reg
+        have h_size :  TreeLikeResolution.size π ≤ 2 ^ (W) := by
+          omega
+        by_cases (W = 0)
+        case pos h_W_eq =>
+          have : π.size ≤ 1 := by
+            subst h_W_eq
+            simp_all only [not_lt_zero', not_isEmpty_of_nonempty, IsEmpty.forall_iff, forall_const, implies_true,
+              pow_zero, zero_add]
+          have : π.width ≤ W_c := by
+            exact size_one_proof φ π_0 W_c h_clause_card π this
+          use π
+          trans W_c
+          trivial
+          omega
+        case neg h_W_neq =>
         have h_x : getRootVariable π ≠ none := h_xx
         -- Convert '≠ none' to 'isSome = true'
         let v : Variable := (getRootVariable π).get (Option.ne_none_iff_isSome.mp h_x)
@@ -1221,7 +1254,7 @@ theorem width_imply_size_ind_version (W : ℕ)
 
         clear h_xx
 
-        unfold TreeLikeRefutation at π
+        --unfold TreeLikeRefutation at π
 
         have ih' := ih smaller_set
 
@@ -1237,11 +1270,12 @@ theorem width_imply_size_ind_version (W : ℕ)
             obtain ⟨left, right⟩ := h_res
             rfl
 
-          have idea₁ : π₁.size ≤ 2^(W - W_c - 1) ∨ π₂.size ≤ 2^(W - W_c - 1) := by
+          have idea₁ : π₁.size ≤ 2^(W - 1) ∨ π₂.size ≤ 2^(W - 1) := by
             unfold TreeLikeResolution.size at h_size
-            have temp : π₁.size + π₂.size ≤ 2^(W - W_c - 1) + 2^(W - W_c - 1) := by
-              have h_pow : 2 ^ (W - W_c) = 2 ^ (W - W_c - 1) + 2 ^ (W - W_c - 1) := by
-                have h_pos : 0 < W - W_c := Nat.sub_pos_of_lt h_ineq
+            have temp : π₁.size + π₂.size ≤ 2^(W - 1) + 2^(W - 1) := by
+              have h_pow : 2 ^ (W) = 2 ^ (W - 1) + 2 ^ (W - 1) := by
+                have h_pos : 0 < W := by
+                  omega
                 nth_rewrite 1 [← Nat.sub_add_cancel h_pos]
                 rw [pow_add, pow_one]
                 ring
@@ -1251,7 +1285,7 @@ theorem width_imply_size_ind_version (W : ℕ)
               omega
             exact size_split temp
 
-          have h_gen_size_lb : π₁.size ≤ 2^(W - W_c) ∧ π₂.size ≤ 2^(W - W_c) := by
+          have h_gen_size_lb : π₁.size ≤ 2^(W) ∧ π₂.size ≤ 2^(W) := by
             unfold TreeLikeResolution.size at h_size
             omega
 
@@ -1261,66 +1295,233 @@ theorem width_imply_size_ind_version (W : ℕ)
           let ρ_false : Assignment {v} := (fun _ => fun _ => False)
           let φ_false := φ.substitute ρ_false
 
-          
+          obtain ⟨h_res_left, h_res_right⟩ := h_res
 
-          have h_π_1_existence : ∃ (π_1 : TreeLikeResolution (φ.substitute ρ_true) (BotClause (s \ {v}))), (π_1.size ≤ π₁.size) := by
-            sorry
+          have hsubset_left :
+            c₁ ⊆ ({v'.toLiteral h_v_in_vars} : Clause s) := by
+            simpa [BotClause] using h_res_left
+
+          have hcases_left :
+            c₁ = ∅ ∨ c₁ = {v'.toLiteral h_v_in_vars} :=
+            Finset.subset_singleton_iff.mp hsubset_left
+
+          -- cases hcases_left with
+          -- | inl h_empty =>
+          --     subst c₁
+          --     use π₁
+          --     obtain ⟨left, right⟩ := h_gen_size_lb
+
+          --     sorry
+          -- | inr h_single =>
+
+
+          have h_π_1_existence : ∃ (π_1 : TreeLikeResolution (φ.substitute ρ_true) (BotClause (s \ {v}))), (π_1.size ≤ π₂.size) := by
+
+            have h_v_sub : {v} ⊆ s := by
+              exact Finset.singleton_subset_iff.mpr h_v_in_vars
+            have fact₀ : (c₂.substitute ρ_true = none) ∨
+              (∃ c_res, c₂.substitute ρ_true = some c_res ∧
+                ∃ c', c' ⊆ c_res ∧
+                ∃ (π' : TreeLikeResolution (φ.substitute ρ_true) c'),
+                  π'.width ≤ π₂.width ∧ π'.size ≤ π₂.size) := by
+              exact resolution_restrict h_v_sub ρ_true π₂
+            have temp_fact : c₂ = ({v'.toNegLiteral h_v_in_vars} : Clause s) := by
+              have idea₁ : v' ∈ c₂.variables := by
+                unfold IsRegularRes at h_reg
+                grind
+              refine Finset.Subset.antisymm_iff.mpr ?_
+              constructor
+              unfold BotClause at h_res_right
+              exact h_res_right
+              have idea₂ :
+                  {v'.toLiteral h_v_in_vars} ⊆ c₂ ∨ {v'.toNegLiteral h_v_in_vars} ⊆ c₂ := by
+                exact var_incl v' c₂ h_v_in_vars idea₁
+              grind
+            have idea₁ : ¬(c₂.substitute ρ_true = none) := by
+              have : ({v'.toNegLiteral h_v_in_vars} : Clause s).substitute ρ_true = BotClause ((s \ {v})) := by
+                exact lit_subst_is_Bot_false (v'.toNegLiteral h_v_in_vars) ρ_true (by rfl)
+              have : c₂.substitute ρ_true = BotClause ((s \ {v})) := by
+                grind
+              grind
+            cases fact₀ with
+            | inl hnone =>
+                contradiction
+            | inr fact₀ =>
+                obtain ⟨c_res, h_c_res⟩ := fact₀
+                obtain ⟨h_c_res_left, h_c_res_rigth⟩ := h_c_res
+                have : c_res  = BotClause ((s \ {v})) := by
+                  have : ({v'.toNegLiteral h_v_in_vars} : Clause s).substitute ρ_true = BotClause ((s \ {v})) := by
+                    exact lit_subst_is_Bot_false (v'.toNegLiteral h_v_in_vars) ρ_true (by rfl)
+                  grind
+
+                obtain ⟨c'_res, h_c'_res⟩ := h_c_res_rigth
+                obtain ⟨h_c'_res_left, h_c'_res_right⟩ := h_c'_res
+                have : c'_res = BotClause ((s \ {v})) := by
+                  grind
+                obtain ⟨π₁', h_c'_res_right⟩ := h_c'_res_right
+                simp_all
+                subst c'_res
+                use π₁'
+                obtain ⟨h_c'_res_right_left, h_c'_res_right_right⟩ := h_c'_res_right
+                exact h_c'_res_right_right
+
+
+
+
+
           obtain ⟨π_1, h_π_1⟩ := h_π_1_existence
 
-          have h_π_2_existence : ∃ (π_2 : TreeLikeResolution (φ.substitute ρ_false) (BotClause (s \ {v}))), (π_2.size ≤ π₂.size) := by
-            sorry
+          have h_π_2_existence : ∃ (π_2 : TreeLikeResolution (φ.substitute ρ_false) (BotClause (s \ {v}))), (π_2.size ≤ π₁.size) := by
+            have h_v_sub : {v} ⊆ s := by
+              exact Finset.singleton_subset_iff.mpr h_v_in_vars
+            have fact₀ : (c₁.substitute ρ_false = none) ∨
+              (∃ c_res, c₁.substitute ρ_false = some c_res ∧
+                ∃ c', c' ⊆ c_res ∧
+                ∃ (π' : TreeLikeResolution (φ.substitute ρ_false) c'),
+                  π'.width ≤ π₁.width ∧ π'.size ≤ π₁.size) := by
+              exact resolution_restrict h_v_sub ρ_false π₁
+            have temp_fact : c₁ = ({v'.toLiteral h_v_in_vars} : Clause s) := by
+              have idea₁ : v' ∈ c₁.variables := by
+                unfold IsRegularRes at h_reg
+                grind
+              refine Finset.Subset.antisymm_iff.mpr ?_
+              constructor
+              unfold BotClause at h_res_left
+              exact h_res_left
+              have idea₂ :
+                  {v'.toLiteral h_v_in_vars} ⊆ c₁ ∨ {v'.toNegLiteral h_v_in_vars} ⊆ c₁ := by
+                exact var_incl v' c₁ h_v_in_vars idea₁
+              grind
+            have idea₁ : ¬(c₁.substitute ρ_false = none) := by
+              have : ({v'.toLiteral h_v_in_vars} : Clause s).substitute ρ_false = BotClause ((s \ {v})) := by
+                exact lit_subst_is_Bot_false (v'.toLiteral h_v_in_vars) ρ_false (by rfl)
+              have : c₁.substitute ρ_false = BotClause ((s \ {v})) := by
+                grind
+              grind
+            cases fact₀ with
+            | inl hnone =>
+                contradiction
+            | inr fact₀ =>
+                obtain ⟨c_res, h_c_res⟩ := fact₀
+                obtain ⟨h_c_res_left, h_c_res_rigth⟩ := h_c_res
+                have : c_res  = BotClause ((s \ {v})) := by
+                  have : ({v'.toLiteral h_v_in_vars} : Clause s).substitute ρ_false = BotClause ((s \ {v})) := by
+                    exact lit_subst_is_Bot_false (v'.toLiteral h_v_in_vars) ρ_false (by rfl)
+                  grind
+
+                obtain ⟨c'_res, h_c'_res⟩ := h_c_res_rigth
+                obtain ⟨h_c'_res_left, h_c'_res_right⟩ := h_c'_res
+                have : c'_res = BotClause ((s \ {v})) := by
+                  grind
+                obtain ⟨π₁', h_c'_res_right⟩ := h_c'_res_right
+                simp_all
+                subst c'_res
+                use π₁'
+                obtain ⟨h_c'_res_right_left, h_c'_res_right_right⟩ := h_c'_res_right
+                exact h_c'_res_right_right
+
+
+
+
+
           obtain ⟨π_2, h_π_2⟩ := h_π_2_existence
 
+
+          have h_clause_subs_width_true : ∀ C ∈ φ.substitute ρ_true, Finset.card C ≤ W_c := by
+                intro C_2 h_c_2
+                unfold CNFFormula.substitute at h_c_2
+                simp at h_c_2
+                obtain ⟨A, h_A⟩ := h_c_2
+                obtain ⟨h_A_left, h_A_right⟩ := h_A
+                trans Finset.card A
+                have : (A.substitute ρ_true = none) ∨ (∃ c_res, A.substitute ρ_true = some c_res ∧ Finset.card c_res ≤ Finset.card A) := by
+                  exact card_subst A
+                -- 1. Split the 'this' hypothesis
+                rcases this with h_none | ⟨c_res, h_some, h_le⟩
+                · -- Case: A.substitute ρ_true = none
+                  -- This is impossible because we know it equals 'some C_2'
+                  rw [h_A_right] at h_none
+                  contradiction
+
+                · -- Case: ∃ c_res, A.substitute ρ_true = some c_res ∧ ...
+                  -- Since A.substitute ρ_true equals both 'some C_2' and 'some c_res'
+                  rw [h_A_right] at h_some
+                  -- Injectivity of 'some' tells us C_2 = c_res
+                  injection h_some with h_eq
+                  -- Substitute c_res for C_2 in the cardinality bound
+                  rw [← h_eq] at h_le
+                  exact h_le
+                exact h_clause_card A h_A_left
+
+          have h_clause_subs_width_false : ∀ C ∈ φ.substitute ρ_false, Finset.card C ≤ W_c := by
+            intro C_2 h_c_2
+            unfold CNFFormula.substitute at h_c_2
+            simp at h_c_2
+            obtain ⟨A, h_A⟩ := h_c_2
+            obtain ⟨h_A_left, h_A_right⟩ := h_A
+            trans Finset.card A
+            have : (A.substitute ρ_false = none) ∨ (∃ c_res, A.substitute ρ_false = some c_res ∧ Finset.card c_res ≤ Finset.card A) := by
+              exact card_subst A
+            -- 1. Split the 'this' hypothesis
+            rcases this with h_none | ⟨c_res, h_some, h_le⟩
+            · -- Case: A.substitute ρ_true = none
+              -- This is impossible because we know it equals 'some C_2'
+              rw [h_A_right] at h_none
+              contradiction
+
+            · -- Case: ∃ c_res, A.substitute ρ_true = some c_res ∧ ...
+              -- Since A.substitute ρ_true equals both 'some C_2' and 'some c_res'
+              rw [h_A_right] at h_some
+              -- Injectivity of 'some' tells us C_2 = c_res
+              injection h_some with h_eq
+              -- Substitute c_res for C_2 in the cardinality bound
+              rw [← h_eq] at h_le
+              exact h_le
+            exact h_clause_card A h_A_left
 
 
 
           cases idea₁ with
-          | inl h_size₁ =>
+          | inr h_size₁ =>
               -- Case 1: π₁.size ≤ 2^(W - W_c - 1)
               -- Your hypothesis here is named h_size₁
-              have idea_0 : π_1.size ≤ 2 ^ (W - 1 - W_c) := by
+              have idea_0 : π_1.size ≤ 2 ^ (W - 1) := by
                 grind
 
               have ineq₁ : W - 1 < W := by
                 grind
 
-              have ineq₂ : W_c < W - 1 := by
-                sorry
-
-              have ih_1 := ih_0 (W - 1) ineq₁ ineq₂
-                (s \ {v}) (φ.substitute ρ_true) (by sorry) π_1 idea_0
-
-              obtain ⟨π_1', idea_00⟩ := ih_1
 
 
-              -- have idea_00 : π_1.width ≤ W - 1 := by
+              have ih_1 := ih_0 (W - 1) ineq₁
+                (s \ {v}) (φ.substitute ρ_true) h_clause_subs_width_true π_1 idea_0
 
-              --   simp_all
+              obtain ⟨π_1', idea_00'⟩ := ih_1
 
-              --   simp_all
-              --   sorry
+              have idea_00 : TreeLikeResolution.width π_1' ≤ W + W_c - 1 := by
+                omega
 
-              have idea_10 : π_2.size ≤ 2^(W - W_c) := by
-                trans π₂.size
+              have idea_10 : π_2.size ≤ 2^(W) := by
+                trans π₁.size
                 exact h_π_2
-                exact Nat.le_of_add_left_le h_size
+                exact h_gen_size_lb.left
 
               have : smaller_set = s \ {v} := by
-                grind
+                exact Finset.erase_eq s v
 
               rw[this] at ih'
 
-              have ih'_1 := ih' (φ.substitute ρ_false) (by sorry) π_2 idea_10
+              have ih'_1 := ih' (φ.substitute ρ_false) h_clause_subs_width_false π_2 idea_10
 
               obtain ⟨π_2', idea_11⟩ := ih'_1
 
 
 
-              have final_idea : ∃ (π' : TreeLikeRefutation φ), TreeLikeResolution.width π' ≤ W - 1 + 1 := by
-                apply width_combine s (v.toLiteral h_v_incl) h_v_incl ρ_true rfl ρ_false rfl (W - 1) π_1' idea_00 π_2' (by grind)
+              have final_idea : ∃ (π' : TreeLikeRefutation φ), TreeLikeResolution.width π' ≤ W + W_c - 1 + 1 := by
+                apply width_combine s (v.toLiteral h_v_incl) h_v_incl ρ_true rfl ρ_false rfl (W + W_c - 1) π_1' idea_00 π_2' (by grind)
                 intro C''
                 intro h_C''
-                trans W
+                trans W + W_c
                 grind
                 omega
               obtain ⟨π_final, conclusion⟩ := final_idea
@@ -1329,75 +1530,49 @@ theorem width_imply_size_ind_version (W : ℕ)
               grind
 
 
-          | inr h_size₂ =>
-              -- Case 2: π₂.size ≤ 2^(W - W_c - 1)
-              -- Your hypothesis here is named h_size₂
-              sorry
+          | inl h_size₂ =>
+              -- Case 1: π₁.size ≤ 2^(W - W_c - 1)
+              -- Your hypothesis here is named h_size₁
+              have idea_0 : π_2.size ≤ 2 ^ (W - 1) := by
+                grind
+
+              have ineq₁ : W - 1 < W := by
+                grind
 
 
--- induction N with
-  -- | zero =>
-  --   -- Base Case: n = 0
-  --     --let π_ans := TreeLikeResolution φ (BotClause ∅) : Tre
-  --     have fix : vars = ∅ := by
-  --       exact Finset.card_eq_zero.mp (id (Eq.symm h_size))
-  --     subst fix
-  --     simp_all only [gt_iff_lt, Finset.card_empty]
-  --     have h := h_unsat.h_unsat
-  --     have : (BotClause ∅) ∈ φ := by
-  --       let a : Assignment ∅ := fun v h_v_mem_vars => by
-  --         exfalso
-  --         exact (List.mem_nil_iff v).mp h_v_mem_vars
-  --       specialize h a
-  --       rw [CNFFormula.eval_eq_false_iff_exists_falsified_clause] at h
-  --       obtain ⟨c, h_c_in_φ, h_c_eval_a_false⟩ := h
-  --       have h_c_eq_bot : c = BotClause ∅ := by
-  --         unfold BotClause
-  --         rw [@Finset.eq_empty_iff_forall_notMem]
-  --         intro l h_l_in_c
-  --         cases l
-  --         case pos v h_v_mem_vars =>
-  --           contradiction
-  --         case neg v h_v_mem_vars =>
-  --           contradiction
-  --       rw [←h_c_eq_bot]
-  --       exact h_c_in_φ
-  --     use TreeLikeResolution.axiom_clause this
-  --     unfold TreeLikeResolution.width
-  --     simp
-  -- | succ n ih =>
+
+              have ih_1 := ih_0 (W - 1) ineq₁
+                (s \ {v}) (φ.substitute ρ_false) h_clause_subs_width_false π_2 idea_0
+
+              obtain ⟨π_2', idea_00'⟩ := ih_1
+
+              have idea_00 : TreeLikeResolution.width π_2' ≤ W + W_c - 1 := by
+                omega
+
+              have idea_10 : π_1.size ≤ 2^(W) := by
+                trans π₂.size
+                exact h_π_1
+                exact h_gen_size_lb.right
+
+              have : smaller_set = s \ {v} := by
+                exact Finset.erase_eq s v
+
+              rw[this] at ih'
+
+              have ih'_1 := ih' (φ.substitute ρ_true) h_clause_subs_width_true π_1 idea_10
+
+              obtain ⟨π_1', idea_11⟩ := ih'_1
 
 
-  --let x : Option Variable := getRootVariable π
 
+              have final_idea : ∃ (π' : TreeLikeRefutation φ), TreeLikeResolution.width π' ≤ W + W_c - 1 + 1 := by
+                apply width_combine s (v.toNegLiteral h_v_incl) h_v_incl ρ_false rfl ρ_true rfl (W + W_c - 1) π_2' idea_00 π_1' (by grind)
+                intro C''
+                intro h_C''
+                trans W + W_c
+                grind
+                omega
+              obtain ⟨π_final, conclusion⟩ := final_idea
 
-  -- s : Finset α
-      -- ih : ∀ (t : Finset α), t ⊂ s → P t
-      -- Goal : P s
-
-
-      -- obtain rfl | ⟨v, hx⟩ := s.eq_empty_or_nonempty
-      -- ·   --let π_ans := TreeLikeResolution φ (BotClause ∅) : Tre
-      --   have h := h_unsat.h_unsat
-      --   have : (BotClause ∅) ∈ φ := by
-      --     let a : Assignment ∅ := fun v h_v_mem_vars => by
-      --       exfalso
-      --       exact (List.mem_nil_iff v).mp h_v_mem_vars
-      --     specialize h a
-      --     rw [CNFFormula.eval_eq_false_iff_exists_falsified_clause] at h
-      --     obtain ⟨c, h_c_in_φ, h_c_eval_a_false⟩ := h
-      --     have h_c_eq_bot : c = BotClause ∅ := by
-      --       unfold BotClause
-      --       rw [@Finset.eq_empty_iff_forall_notMem]
-      --       intro l h_l_in_c
-      --       cases l
-      --       case pos v h_v_mem_vars =>
-      --         contradiction
-      --       case neg v h_v_mem_vars =>
-      --         contradiction
-      --     rw [←h_c_eq_bot]
-      --     exact h_c_in_φ
-      --   use TreeLikeResolution.axiom_clause this
-      --   unfold TreeLikeResolution.width
-      --   simp
-      -- Inductive Step: s is not empty, so we picked x ∈ s
+              use π_final
+              grind

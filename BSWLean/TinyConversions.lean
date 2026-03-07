@@ -1,5 +1,16 @@
 import BSWLean.Treelike
 
+def is_resolve {vars} {φ : CNFFormula vars} {c : Clause vars} :
+    TreeLikeResolution φ c → Prop
+  | .axiom_clause _ => false
+  | .resolve .. => true
+
+def IsRegularRes {vars} {φ : CNFFormula vars} : ∀ {c : Clause vars}, TreeLikeResolution φ c → Prop
+  | _, .axiom_clause _ => True
+  | _, .resolve c₁ c₂ v _ _ π₁ π₂ _ =>
+      v ∈ c₁.variables ∧ v ∈ c₂.variables ∧ IsRegularRes π₁ ∧ IsRegularRes π₂
+
+
 @[simp]
 lemma trivial_convert_card {vars₁ vars₂} {C : Clause vars₁} {h}
   : (C.convert_trivial vars₂ h).card = C.card := by
@@ -147,3 +158,186 @@ lemma subset_combine {vars₁ vars₂} (c₁ c₂ : Clause vars₁) (c' : Clause
       aesop
 
     simp_all
+
+
+
+
+lemma resolution_restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
+    (h_subs : vars₁ ⊆ vars₂) (ρ : Assignment vars₁)
+    {C : Clause vars₂} (π : TreeLikeResolution φ C) :
+    (C.substitute ρ = none) ∨
+    (∃ c_res, C.substitute ρ = some c_res ∧
+      ∃ c', c' ⊆ c_res ∧
+      ∃ (π' : TreeLikeResolution (φ.substitute ρ) c'),
+        π'.width ≤ π.width ∧ π'.size ≤ π.size) := by
+  induction π with
+  | axiom_clause h_in =>
+      -- Look at c.substitute ρ.
+      -- If none, return Or.inl.
+      -- If some c_res, c_res is in the new formula by definition of CNFFormula.substitute.
+      unfold Clause.substitute
+      sorry
+  | resolve c₁ c₂ v h_v_mem h_v_not_mem π₁ π₂ h_res ih₁ ih₂ =>
+      -- Check if v ∈ vars₁ (assigned) or v ∉ vars₁ (unassigned).
+      -- If assigned, one of ih₁ or ih₂ will evaluate to `none`, and the other
+      -- will shrink and bypass the resolution step entirely!
+      -- If unassigned, apply resolution to the results of ih₁ and ih₂.
+      sorry
+
+-- lemma width_and_size_respect_substitution {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
+--     (x : Literal vars₂) (h₀ : x.variable ∈ vars₂) (h_subs : vars₁ ⊆ vars₂)
+--     (ρ : (Assignment vars₁))
+--     (W : ℕ) (S : ℕ)
+--     (π : TreeLikeResolution φ (BotClause vars₂)) (h_width : π.width ≤ W) (h_size : π.size ≤ S) :
+--     ∃ (π_1 : TreeLikeResolution (φ.substitute ρ) (BotClause (vars₂ \ vars₁))), (π_1.width ≤ W ∧ π_1.size ≤ S) := by
+
+--   -- 1. Apply the generalized induction lemma
+--   have h_gen := resolution_restrict h_subs ρ π
+
+--   -- 2. Handle the two cases from the generalized lemma
+--   rcases h_gen with h_none | ⟨c_res, h_some, c', h_subset, π', h_w, h_s⟩
+
+--   · -- Case 1: BotClause was satisfied (Impossible)
+--     -- You will need a helper lemma: `BotClause.substitute ρ ≠ none`
+--     -- Once you have it, this branch closes by contradiction.
+--     sorry
+
+--   · -- Case 2: We got a restricted proof
+--     -- You need a helper lemma showing that `BotClause.substitute ρ = some (BotClause (vars₂ \ vars₁))`
+--     -- From `h_some`, you can deduce `c_res = BotClause (vars₂ \ vars₁)`
+--     -- From `h_subset`, `c' ⊆ BotClause (vars₂ \ vars₁)`, meaning `c' = BotClause (vars₂ \ vars₁)`
+
+
+--     have : c' = BotClause (vars₂ \ vars₁) :=
+--       sorry
+--     subst c'
+--     -- Once you rewrite c' to BotClause, π' is exactly the TreeLikeRefutation you need!
+--     use π'  -- Wait to do this until Lean sees π' derives BotClause
+
+--     -- Prove the bounds using transitivity
+--     constructor
+--     · exact Nat.le_trans h_w h_width
+--     · exact Nat.le_trans h_s h_size
+
+
+lemma substitute_trivial_property {vars}
+    (φ : CNFFormula vars)
+    (x : Literal vars) (h₀ : x.variable ∈ vars)
+    (C_0 : Clause vars)
+    (h_subs : (vars \ {x.variable}) ⊆ vars)
+    (ρ_false : (Assignment ({x.variable} : Finset Variable)))
+    (h_value_false : ρ_false = (fun _ _ => (¬x.polarity : Bool)))
+    (h_c : C_0 ∈ ((CNFFormula.simple_convert
+        (vars \ {x.variable}) vars (φ.substitute ρ_false) h_subs)))
+    (C_1 : Clause (vars \ {x.variable}))
+    (h_C_1_conv_left : C_1 ∈ (φ.substitute ρ_false))
+    (h_incl : ∀ l ∈ C_1, l.variable ∈ vars)
+    (h_C_1_conv_right : C_1.convert vars h_incl = C_0)
+    (C_2 : Clause vars)
+    (h_C_2_conv : C_2 ∈ φ ∧ C_2.substitute ρ_false = some C_1)
+    : C_2 ⊆ C_0 ∪ ({x} : Clause vars) := by
+  intro l hl
+
+  obtain ⟨left, right⟩ := h_C_2_conv
+  rw [← h_C_1_conv_right]
+
+
+  -- 3. Since l ∈ C_1.convert, there must be a source literal l' ∈ C_1
+  -- You'll likely need to unfold Clause.convert or use a lemma like 'mem_convert'
+  unfold Clause.convert
+  simp
+  by_cases l = x
+  case pos h_l =>
+    exact Or.symm (Or.inr h_l)
+  case neg h_l =>
+    refine Or.symm (Or.intro_left (l = x) ?_)
+    unfold Clause.substitute at right
+    simp at right
+    obtain ⟨h_sp_l, h_sp_r⟩ := right
+    -- aesop
+    -- unfold Clause.split
+    -- aesop
+    -- unfold Clause.shrink
+    -- aesop
+    -- unfold Clause.split at h_c
+    -- aesop
+    -- unfold Clause.shrink at h_c
+    -- aesop
+    -- unfold Clause.convert at h_c
+    -- simp at h_c
+    sorry
+
+lemma weaken_proof {vars} {φ : CNFFormula vars} {c c' : Clause vars}
+    (π : TreeLikeResolution φ c) (h_sub : c ⊆ c') :
+    ∃ (π' : TreeLikeResolution φ c'), IsRegularRes π → (IsRegularRes π' ∧ π'.size ≤ π.size) := by
+  -- This requires its own induction on π.
+  -- If you encounter a resolve node where the resolved variable is already in c',
+  -- you must bypass that node here as well to maintain IsRegularRes.
+  induction π with
+  | axiom_clause h_in =>
+      -- Base case is trivially regular
+      sorry
+      -- use TreeLikeResolution.axiom_clause h_in
+      -- simp [IsRegularRes, TreeLikeResolution.size]
+      -- sorry
+  | resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res ih₁ ih₂ => sorry
+
+lemma eliminate_vacuous_resolutions_prep {vars} {φ : CNFFormula vars} {c : Clause vars}
+    (π : TreeLikeResolution φ c):
+    ∃ (c' : Clause vars) (π' : TreeLikeResolution φ c'), (c' ⊆ c) ∧ IsRegularRes π' ∧ π'.size ≤ π.size := by
+  induction π with
+  | axiom_clause h_in =>
+      -- Base case is trivially regular
+      -- use .axiom_clause h_in
+      -- simp [IsRegularRes, TreeLikeResolution.size]
+      sorry
+  | resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res ih₁ ih₂ =>
+      -- 1. Extract the regularized subproofs from the inductive hypotheses
+      -- obtain ⟨π₁', h_reg₁, h_size₁⟩ := ih₁
+      -- obtain ⟨π₂', h_reg₂, h_size₂⟩ := ih₂
+
+      -- -- 2. Check if the resolution is vacuous
+      -- by_cases hv1 : v ∈ c₁.variables
+      -- · by_cases hv2 : v ∈ c₂.variables
+      --   · -- Case A: Non-vacuous. Both contain v.
+      --     -- We can safely reconstruct the resolve node.
+      --     use .resolve c₁ c₂ v h_v_mem h_v_not π₁' π₂' h_res
+
+      --     -- The size and regularity bounds hold by simple arithmetic and the IHs
+      --     constructor
+      --     · simp only [IsRegularRes]
+      --       exact ⟨hv1, hv2, h_reg₁, h_reg₂⟩
+      --     · -- π'.size = 1 + π₁'.size + π₂'.size ≤ 1 + π₁.size + π₂.size
+      --       -- (Use 'omega' or 'linarith' here)
+      --       sorry
+
+      --   · -- Case B: Vacuous on the right. v ∉ c₂.variables.
+      --     -- Because c₂ ⊆ c ∪ {~v} and v ∉ c₂, it must be that c₂ ⊆ c.
+      --     have h_c2_sub_c : c₂ ⊆ c := by
+      --       -- Prove this using your Finset/Clause API
+      --       sorry
+
+      --     -- We completely bypass π₁' and the resolve node!
+      --     obtain ⟨π_new, h_new_prop⟩ := weaken_proof π₂' h_c2_sub_c
+      --     --use π_new
+
+      --     -- π_new.size ≤ π₂'.size ≤ π₂.size < 1 + π₁.size + π₂.size
+      --     -- (Apply h_new_prop to h_reg₂ to get regularity and size)
+      --     sorry
+
+      -- · -- Case C: Vacuous on the left. v ∉ c₁.variables.
+      --   -- Exactly symmetrical to Case B.
+      --   have h_c1_sub_c : c₁ ⊆ c := by
+      --     sorry
+
+      --   obtain ⟨π_new, h_new_prop⟩ := weaken_proof π₁' h_c1_sub_c
+      --   --use π_new
+      --   sorry
+    sorry
+
+lemma size_one_proof {vars} (φ : CNFFormula vars)
+    (π : TreeLikeResolution φ (BotClause vars))
+    (W_c : ℕ) (h_clause_card : ∀ C ∈ φ, C.card ≤ W_c) (π : TreeLikeRefutation φ)
+    (h_size : π.size ≤ 1) :
+     π.width ≤ W_c := by
+  sorry
