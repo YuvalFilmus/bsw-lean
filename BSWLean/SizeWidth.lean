@@ -1231,7 +1231,7 @@ theorem width_imply_size_ind_version (W : ℕ)
             simp_all only [not_lt_zero', not_isEmpty_of_nonempty, IsEmpty.forall_iff, forall_const, implies_true,
               pow_zero, zero_add]
           have : π.width ≤ W_c := by
-            exact size_one_proof φ π_0 W_c h_clause_card π this
+            exact size_one_proof φ W_c h_clause_card π this
           use π
           trans W_c
           trivial

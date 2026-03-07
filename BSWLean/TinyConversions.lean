@@ -335,9 +335,27 @@ lemma eliminate_vacuous_resolutions_prep {vars} {φ : CNFFormula vars} {c : Clau
       --   sorry
     sorry
 
+@[aesop safe]
+lemma proof_size_positive {vars} {φ : CNFFormula vars} {c : Clause vars}
+    (π : TreeLikeResolution φ c) : π.size > 0 := by
+  unfold TreeLikeResolution.size
+  aesop
+
 lemma size_one_proof {vars} (φ : CNFFormula vars)
-    (π : TreeLikeResolution φ (BotClause vars))
     (W_c : ℕ) (h_clause_card : ∀ C ∈ φ, C.card ≤ W_c) (π : TreeLikeRefutation φ)
     (h_size : π.size ≤ 1) :
      π.width ≤ W_c := by
-  sorry
+  cases h : π with
+  | axiom_clause h_in => aesop
+  | resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res =>
+      -- This is impossible, as a resolution step has size > 1.
+      -- You can close this branch by contradiction.
+    suffices π.size > 1 by
+      omega
+
+    unfold TreeLikeResolution.size at *
+    subst h
+    simp_all only [gt_iff_lt]
+    trans 1 + π₁.size
+    · aesop
+    · aesop
