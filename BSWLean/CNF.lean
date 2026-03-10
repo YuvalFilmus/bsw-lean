@@ -31,6 +31,20 @@ def Literal.polarity {vars} (l : Literal vars) : Bool :=
   | .pos _ _ => True
   | .neg _ _ => False
 
+lemma Literal.eq_iff_polarity_and_variable_eq {vars} {l₁ l₂ : Literal vars} :
+    l₁ = l₂ ↔ (l₁.polarity = l₂.polarity ∧ l₁.variable = l₂.variable) := by
+  constructor
+
+  case mp =>
+    intro h
+    rw [h]
+    simp
+
+  case mpr =>
+    intro h
+    unfold Literal.polarity Literal.variable at h
+    aesop
+
 @[simp]
 lemma Literal.variable_mem_vars {vars} (l : Literal vars) : l.variable ∈ vars := by
   cases l
@@ -206,3 +220,29 @@ lemma Clause.subset_variables {vars} {c₁ c₂ : Clause vars} (h : c₁ ⊆ c�
   intro l h_l
   have : l ∈ c₂ := by aesop
   aesop
+
+@[aesop unsafe]
+lemma Clause.resolve_maintains_subset {vars} {c₁ c₁' c₂ c₂' : Clause vars} {x : Variable}
+    (h_x : x ∈ vars) (h_subset₁ : c₁ ⊆ c₁') (h_subset₂ : c₂ ⊆ c₂') :
+    Clause.resolve c₁ c₂ x h_x ⊆ Clause.resolve c₁' c₂' x h_x := by
+  unfold Clause.resolve
+  intro l h_l_in_resolve
+  aesop
+
+@[aesop safe]
+lemma Clause.resolve_satisfies_h_resolve_left {vars} {c₁ c₂ : Clause vars} {v : Variable}
+    (h_v_mem_vars : v ∈ vars) :
+    (c₁ ⊆ c₁.resolve c₂ v h_v_mem_vars ∪ { v.toLiteral h_v_mem_vars }) := by
+  unfold Clause.resolve
+  intro l h
+  simp only [Finset.union_singleton, Finset.mem_insert, Finset.mem_union, Finset.mem_erase, ne_eq]
+  tauto
+
+@[aesop safe]
+lemma Clause.resolve_satisfies_h_resolve_right {vars} {c₁ c₂ : Clause vars} {v : Variable}
+    (h_v_mem_vars : v ∈ vars) :
+    (c₂ ⊆ c₁.resolve c₂ v h_v_mem_vars ∪ { v.toNegLiteral h_v_mem_vars }) := by
+  unfold Clause.resolve
+  intro l h
+  simp only [Finset.union_singleton, Finset.mem_insert, Finset.mem_union, Finset.mem_erase, ne_eq]
+  tauto

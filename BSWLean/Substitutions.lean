@@ -89,6 +89,15 @@ def Clause.substitute {vars sub_vars} (c : Clause vars) (ρ : Assignment sub_var
   else
     some c_out
 
+@[aesop unsafe]
+lemma Clause.substitute_maintains_subset {vars sub_vars} {c₁ c₂ : Clause vars}
+    {h_subset : c₁ ⊆ c₂} (ρ : Assignment sub_vars) (h₁) (h₂) :
+    ((c₁.substitute ρ).get h₁ ⊆ (c₂.substitute ρ).get h₂) := by
+  unfold Clause.substitute Clause.split Clause.shrink
+  simp only [Finset.mem_filter, Option.get_ite']
+  intro l h
+  aesop
+
 lemma Clause.substitute_eq_none_iff_eval_subclause_true {vars sub_vars} (c : Clause vars)
     (ρ : Assignment sub_vars) :
     c.substitute ρ = none ↔
@@ -194,3 +203,191 @@ lemma CNFFormula.substitute_preimage {vars sub_vars} {φ : CNFFormula vars}
     ∃ c' ∈ φ, c'.substitute ρ = some c := by
   unfold CNFFormula.substitute at h_c
   simp_all
+
+@[aesop unsafe]
+lemma Clause.substitute_isSome_subset {vars sub_vars} {c₁ c₂ : Clause vars}
+    {ρ : Assignment sub_vars} (h_subset : c₁ ⊆ c₂) (h : (c₂.substitute ρ).isSome) :
+    (c₁.substitute ρ).isSome := by
+  rw [Clause.substitute_isSome_iff_eval_subclause_false] at *
+  simp_all only [Bool.not_eq_true]
+  rw [Clause.eval_eq_false_iff_all_falsified_literals] at *
+  suffices (c₁.split sub_vars).1 ⊆ (c₂.split sub_vars).1 by aesop
+  unfold Clause.split
+  simp only
+  unfold Clause.shrink
+  simp only
+  intro l h
+  aesop
+
+@[aesop unsafe]
+lemma Clause.substitute_isNone_subset {vars sub_vars} {c₁ c₂ : Clause vars}
+    {ρ : Assignment sub_vars} (h_subset : c₁ ⊆ c₂) (h : (c₁.substitute ρ).isNone) :
+    (c₂.substitute ρ).isNone := by
+  contrapose! h
+  simp_all only [ne_eq, Option.isNone_iff_eq_none, ←Option.isSome_iff_ne_none]
+  exact substitute_isSome_subset h_subset h
+
+lemma Clause.resolve_substitute_isNone {vars sub_vars} {c₁ c₂ : Clause vars} {x : Variable}
+    (h_x : x ∈ vars) {ρ : Assignment sub_vars} (h_c₁ : (c₁.substitute ρ).isNone)
+    (h_c₂ : (c₂.substitute ρ).isNone) :
+    ((Clause.resolve c₁ c₂ x h_x).substitute ρ).isNone := by
+  simp_all only [Option.isNone_iff_eq_none]
+  rw [Clause.substitute_eq_none_iff_eval_subclause_true] at *
+  rw [Clause.eval_eq_true_iff_exists_satisfied_literal] at *
+  obtain ⟨l₁, ⟨h_l₁_in_c₁, h_l₁_eval⟩⟩ := h_c₁
+  obtain ⟨l₂, ⟨h_l₂_in_c₂, h_l₂_eval⟩⟩ := h_c₂
+
+  if h : l₁.variable = x ∧ l₂.variable = x then
+    have h_eq : l₁ = l₂ := by
+      suffices l₁.polarity = l₂.polarity by
+        have : l₁.variable = l₂.variable := by aesop
+        match l₁, l₂ with
+        | .pos _ _, .pos _ _ => aesop
+        | .neg _ _, .neg _ _ => aesop
+        | .neg _ _, .pos _ _ => contradiction
+        | .pos _ _, .neg _ _ => contradiction
+      let ρ' := ρ.restrict (vars ∩ sub_vars) (by aesop)
+      have : l₁.eval ρ' = l₂.eval ρ' := by aesop
+      unfold Literal.eval at this
+      match l₁, l₂ with
+      | .pos _ _, .pos _ _ => aesop
+      | .neg _ _, .neg _ _ => aesop
+      | .neg v₁ _, .pos v₂ _ =>
+        have h_eq : v₁ = v₂ := by aesop
+        aesop
+      | .pos v₁ _, .neg v₂ _ =>
+        have h_eq : v₁ = v₂ := by aesop
+        aesop
+    have : l₂ ∈ ((c₁.resolve c₂ x h_x).split sub_vars).1 := by
+      subst h_eq
+      unfold Clause.resolve
+      unfold Clause.split Clause.shrink at *
+      simp_all only
+      rw [Finset.mem_filterMap] at h_l₁_in_c₁ h_l₂_in_c₂
+      obtain ⟨l₁', ⟨h_l₁'_mem, h₁⟩⟩ := h_l₁_in_c₁
+      obtain ⟨l₂', ⟨h_l₂'_mem, h₂⟩⟩ := h_l₂_in_c₂
+      rw [Finset.mem_filterMap]
+      if h_pos : l₁.polarity then
+        use l₂'
+        simp_all only [and_self, Finset.mem_filter, Option.dite_none_right_eq_some,
+          Option.some.injEq, and_exists_self, Finset.mem_union, Finset.mem_erase, ne_eq]
+        subst h
+        simp_all only [exists_true_left, and_true, exists_prop]
+        subst h₂
+        right
+        suffices l₂'.polarity by
+          unfold Literal.polarity at this
+          unfold Variable.toNegLiteral
+          grind
+        unfold Literal.polarity at *
+        unfold Literal.restrict at h_pos
+        aesop
+      else
+        use l₁'
+        simp_all only [and_self, Finset.mem_filter, Option.dite_none_right_eq_some,
+          Option.some.injEq, and_exists_self, Finset.mem_union, Finset.mem_erase, ne_eq]
+        subst h
+        simp_all only [exists_true_left, and_true, exists_prop]
+        subst h₁
+        left
+        suffices ¬l₁'.polarity by
+          unfold Literal.polarity at this
+          unfold Variable.toLiteral
+          grind
+        unfold Literal.polarity at *
+        unfold Literal.restrict at h_pos
+        aesop
+    use l₂
+  else if h_var₁ : l₁.variable ≠ x then
+    have : l₁ ∈ ((c₁.resolve c₂ x h_x).split sub_vars).1 := by
+      unfold Clause.split Clause.shrink at *
+      simp_all only
+      rw [Finset.mem_filterMap] at h_l₁_in_c₁
+      obtain ⟨l₁', ⟨h_l₁'_mem, h₁⟩⟩ := h_l₁_in_c₁
+      rw [Finset.mem_filterMap]
+      use l₁'
+      simp_all only [Finset.mem_filter, Finset.mem_filterMap, Option.dite_none_right_eq_some,
+        Option.some.injEq, and_exists_self, false_and, not_false_eq_true, ne_eq, and_self,
+        ↓reduceDIte, and_true, dite_eq_ite, ite_eq_left_iff, reduceCtorEq, imp_false,
+        Decidable.not_not]
+      unfold Clause.resolve
+      simp only [Finset.mem_union, Finset.mem_erase, ne_eq]
+      left
+      constructor
+      · unfold Variable.toLiteral
+        unfold Literal.variable at h_var₁
+        simp only at h_var₁
+        cases l₁'
+        case pos v h_v_mem_vars =>
+          aesop
+        case neg v h_v_mem_vars =>
+          aesop
+      · aesop
+    use l₁
+  else
+    have h_var₂ : l₂.variable ≠ x := by aesop
+    have : l₂ ∈ ((c₁.resolve c₂ x h_x).split sub_vars).1 := by
+      unfold Clause.split Clause.shrink at *
+      simp_all only
+      rw [Finset.mem_filterMap] at h_l₂_in_c₂
+      obtain ⟨l₂', ⟨h_l₂'_mem, h₂⟩⟩ := h_l₂_in_c₂
+      rw [Finset.mem_filterMap]
+      use l₂'
+      simp_all only [Finset.mem_filter, Finset.mem_filterMap, Option.dite_none_right_eq_some,
+        Option.some.injEq, and_exists_self, and_false, not_false_eq_true, ne_eq, Decidable.not_not,
+        and_self, ↓reduceDIte, and_true, dite_eq_ite, ite_eq_left_iff, reduceCtorEq, imp_false]
+      unfold Clause.resolve
+      simp only [Finset.mem_union, Finset.mem_erase, ne_eq]
+      right
+      constructor
+      · unfold Variable.toNegLiteral
+        unfold Literal.variable at h_var₂
+        simp only at h_var₂
+        cases l₂'
+        case pos v h_v_mem_vars =>
+          aesop
+        case neg v h_v_mem_vars =>
+          aesop
+      · aesop
+    use l₂
+
+@[simp]
+lemma Clause.substitute_variables {vars sub_vars} {c : Clause vars} (ρ : Assignment sub_vars)
+    (h_c : (c.substitute ρ).isSome) :
+    ((c.substitute ρ).get h_c).variables = c.variables \ sub_vars := by
+  unfold Clause.substitute Clause.split Clause.shrink Clause.variables
+  simp only [Finset.mem_filter, Option.get_ite']
+  ext v
+  constructor
+  · intro h
+    simp_all only [Finset.mem_image, Finset.mem_filterMap, Finset.mem_filter,
+      Option.dite_none_right_eq_some, Option.some.injEq, and_exists_self, ↓existsAndEq, true_and,
+      Finset.mem_sdiff]
+    obtain ⟨l, ⟨h_l_in_c, h_l_vars⟩⟩ := h
+    constructor
+    swap
+    · unfold Literal.restrict Literal.variable at *
+      aesop
+    use l
+    unfold Literal.restrict Literal.variable at *
+    aesop
+  · intro h
+    simp_all only [Finset.mem_sdiff, Finset.mem_image, Finset.mem_filterMap, Finset.mem_filter,
+      Option.dite_none_right_eq_some, Option.some.injEq, and_exists_self, ↓existsAndEq, true_and]
+    have h_right := h.right
+    obtain ⟨l, h_l_in_c, h_l_vars⟩ := h.left
+    use l
+    unfold Literal.restrict Literal.variable at *
+    aesop
+
+lemma Clause.substitute_resolve_eq_resolve_substitute {vars sub_vars} {c₁ c₂ : Clause vars}
+    (ρ : Assignment sub_vars) (v : Variable) (h_v : v ∈ vars \ sub_vars) (h₁) (h₂)
+    (h_res : ((c₁.resolve c₂ v (by
+     rw [Finset.mem_sdiff] at h_v
+     exact h_v.left)).substitute ρ).isSome) :
+    ((c₁.substitute ρ).get h₁).resolve ((c₂.substitute ρ).get h₂) v h_v =
+      ((c₁.resolve c₂ v (by
+        rw [Finset.mem_sdiff] at h_v
+        exact h_v.left
+      )).substitute ρ).get h_res := by
+  sorry

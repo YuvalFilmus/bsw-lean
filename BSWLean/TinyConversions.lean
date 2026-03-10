@@ -12,8 +12,8 @@ def IsRegularRes {vars} {φ : CNFFormula vars} : ∀ {c : Clause vars}, TreeLike
 
 
 @[simp]
-lemma trivial_convert_card {vars₁ vars₂} {C : Clause vars₁} {h}
-  : (C.convert_trivial vars₂ h).card = C.card := by
+lemma trivial_convert_card {vars₁ vars₂} {C : Clause vars₁} {h} :
+    (C.convert_trivial vars₂ h).card = C.card := by
   refine Set.BijOn.finsetCard_eq ?_ ?_
   · intro lit₁
     subst h
@@ -159,8 +159,387 @@ lemma subset_combine {vars₁ vars₂} (c₁ c₂ : Clause vars₁) (c' : Clause
 
     simp_all
 
+lemma resolve_substitute_left {vars sub_vars} (c₁ c₂ : Clause vars) {x : Variable}
+    (ρ : Assignment sub_vars) (h_x_in : x ∈ vars) (h₂ : (c₂.substitute ρ).isNone)
+    (h_res : ((c₁.resolve c₂ x h_x_in).substitute ρ).isSome) : x ∈ sub_vars := by
+  unfold Clause.resolve at h_res
+  rw [Clause.substitute_isSome_iff_eval_subclause_false] at h_res
+  simp only [Option.isNone_iff_eq_none] at h₂
+  rw [Clause.substitute_eq_none_iff_eval_subclause_true] at h₂
+  unfold Clause.split Clause.shrink at *
+  simp_all only [Finset.mem_filter, Bool.not_eq_true, Finset.mem_union, Finset.mem_erase, ne_eq]
+  rw [Clause.eval_eq_true_iff_exists_satisfied_literal] at h₂
+  rw [Clause.eval_eq_false_iff_all_falsified_literals] at h_res
+  simp_all only [Finset.mem_filterMap, Finset.mem_filter, Option.dite_none_right_eq_some,
+    Option.some.injEq, and_exists_self, forall_exists_index, forall_and_index, Finset.mem_union,
+    Finset.mem_erase, ne_eq, ↓existsAndEq, true_and]
+  obtain ⟨l₂, ⟨⟨h_l₂_in_c₂, h_l₂_var_in_sub_vars⟩, h_l₂_eval⟩⟩ := h₂
+  by_contra!
+  have h_l₂_var_not_x : l₂.variable ≠ x := by aesop
+  have : l₂ ≠ x.toNegLiteral h_x_in := by
+    unfold Literal.variable Variable.toNegLiteral at *
+    aesop
+  have := h_res (l₂.restrict (vars ∩ sub_vars) (by aesop)) l₂
+    (by aesop) h_l₂_var_in_sub_vars (by rfl)
+  aesop
 
+lemma resolve_substitute_right {vars sub_vars} (c₁ c₂ : Clause vars) {x : Variable}
+    (ρ : Assignment sub_vars) (h_x_in : x ∈ vars) (h₁ : (c₁.substitute ρ).isNone)
+    (h_res : ((c₁.resolve c₂ x h_x_in).substitute ρ).isSome) : x ∈ sub_vars := by
+  unfold Clause.resolve at h_res
+  rw [Clause.substitute_isSome_iff_eval_subclause_false] at h_res
+  simp only [Option.isNone_iff_eq_none] at h₁
+  rw [Clause.substitute_eq_none_iff_eval_subclause_true] at h₁
+  unfold Clause.split Clause.shrink at *
+  simp_all only [Finset.mem_filter, Bool.not_eq_true, Finset.mem_union, Finset.mem_erase, ne_eq]
+  rw [Clause.eval_eq_true_iff_exists_satisfied_literal] at h₁
+  rw [Clause.eval_eq_false_iff_all_falsified_literals] at h_res
+  simp_all only [Finset.mem_filterMap, Finset.mem_filter, Option.dite_none_right_eq_some,
+    Option.some.injEq, and_exists_self, forall_exists_index, forall_and_index, Finset.mem_union,
+    Finset.mem_erase, ne_eq, ↓existsAndEq, true_and]
+  obtain ⟨l₁, ⟨⟨h_l₁_in_c₁, h_l₁_var_in_sub_vars⟩, h_l₁_eval⟩⟩ := h₁
+  by_contra!
+  have h_l₁_var_not_x : l₁.variable ≠ x := by aesop
+  have : l₁ ≠ x.toLiteral h_x_in := by
+    unfold Literal.variable Variable.toLiteral at *
+    aesop
+  have := h_res (l₁.restrict (vars ∩ sub_vars) (by aesop)) l₁
+    (by aesop) h_l₁_var_in_sub_vars (by rfl)
+  aesop
 
+def TreeLikeResolution.restrict_rhs {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
+    {C : Clause vars₂} (π : TreeLikeResolution φ C) (ρ : Assignment vars₁)
+    (h_some : (C.substitute ρ).isSome) :
+    Clause (vars₂ \ vars₁) :=
+  match h : π with
+  | .axiom_clause h_in =>
+      (C.substitute ρ).get h_some
+  | .resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res =>
+      have : Clause.resolve c₁ c₂ v h_v_mem ⊆ C := by
+        unfold Clause.resolve
+        refine Finset.union_subset_iff.mpr ?_
+        constructor
+        · refine Finset.subset_insert_iff.mp ?_
+          aesop
+        · refine Finset.subset_insert_iff.mp ?_
+          aesop
+      have h_resolve_isSome : ((Clause.resolve c₁ c₂ v h_v_mem).substitute ρ).isSome := by aesop
+      if h₁ : c₁.substitute ρ = none then
+        have : (c₂.substitute ρ).isSome := by
+          contrapose! h_resolve_isSome
+          simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff] at h_resolve_isSome
+          rw [←Option.isNone_iff_eq_none] at h₁
+          simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff]
+          exact Clause.resolve_substitute_isNone h_v_mem h₁ h_resolve_isSome
+        π₂.restrict_rhs ρ this
+      else if h₂ : c₂.substitute ρ = none then
+        π₁.restrict_rhs ρ (Option.isSome_iff_ne_none.mpr h₁)
+      else
+        let c₁' := π₁.restrict_rhs ρ (Option.isSome_iff_ne_none.mpr h₁)
+        let c₂' := π₂.restrict_rhs ρ (Option.isSome_iff_ne_none.mpr h₂)
+        if h_v : v ∈ vars₁ then
+          if h_ρ_v : ρ v h_v then
+            c₂'
+          else
+            c₁'
+        else
+          Clause.resolve c₁' c₂' v (by aesop)
+
+lemma TreeLikeResolution.restrict_rhs_subset_substitute {vars₁ vars₂ : Variables}
+    {φ : CNFFormula vars₂} {C : Clause vars₂} (π : TreeLikeResolution φ C) (ρ : Assignment vars₁)
+    (h_some : (C.substitute ρ).isSome) :
+    π.restrict_rhs ρ h_some ⊆ (C.substitute ρ).get h_some := by
+  induction h : π
+  case axiom_clause c h_in =>
+    unfold TreeLikeResolution.restrict_rhs
+    trivial
+  case resolve c c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res ih₁ ih₂ =>
+    have : Clause.resolve c₁ c₂ v h_v_mem ⊆ c := by
+      unfold Clause.resolve
+      refine Finset.union_subset_iff.mpr ?_
+      constructor
+      · refine Finset.subset_insert_iff.mp ?_
+        aesop
+      · refine Finset.subset_insert_iff.mp ?_
+        aesop
+    have h_resolve_isSome : ((Clause.resolve c₁ c₂ v h_v_mem).substitute ρ).isSome := by aesop
+    unfold TreeLikeResolution.restrict_rhs
+    simp only [dite_eq_ite]
+    by_cases h₁ : c₁.substitute ρ = none
+    case pos =>
+      simp only [h₁, ↓reduceDIte]
+      have h_c₂_isSome : (c₂.substitute ρ).isSome := by
+        contrapose! h_resolve_isSome
+        simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff] at h_resolve_isSome
+        rw [←Option.isNone_iff_eq_none] at h₁
+        simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff]
+        exact Clause.resolve_substitute_isNone h_v_mem h₁ h_resolve_isSome
+      have h_left := ih₂ π₂ h_c₂_isSome (by rfl)
+      trans (c₂.substitute ρ).get h_c₂_isSome
+      · exact h_left
+      have h_x_in_vars₁ : v ∈ vars₁ := by
+        apply resolve_substitute_right c₁ c₂ ρ h_v_mem (by aesop) h_resolve_isSome
+      trans ((c₁.resolve c₂ v h_v_mem).substitute ρ).get h_resolve_isSome
+      swap
+      · aesop
+      unfold Clause.resolve Clause.substitute Clause.split Clause.shrink
+      simp only [Finset.mem_filter, Option.get_ite', Finset.mem_union, Finset.mem_erase, ne_eq]
+      intro l h_l
+      rw [Finset.mem_filterMap] at h_l
+      obtain ⟨l', ⟨h_l'_mem, h_l_eval⟩⟩ := h_l
+      rw [Finset.mem_filterMap]
+      have h_l'_neq : l' ≠ v.toNegLiteral h_v_mem := by
+        unfold Literal.variable Variable.toNegLiteral at *
+        aesop
+      use l'
+      simp only [Finset.mem_filter, Finset.mem_union, Finset.mem_erase, ne_eq,
+        Option.dite_none_right_eq_some, Option.some.injEq, and_exists_self]
+      use by aesop
+      aesop
+    case neg =>
+      simp only [h₁, ↓reduceDIte]
+      by_cases h₂ : c₂.substitute ρ = none
+      case pos =>
+        simp only [h₂, ↓reduceDIte]
+        have h_c₁_isSome : (c₁.substitute ρ).isSome := by
+          contrapose! h_resolve_isSome
+          simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff] at h_resolve_isSome
+          rw [←Option.isNone_iff_eq_none] at h₂
+          simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff]
+          exact Clause.resolve_substitute_isNone h_v_mem h_resolve_isSome h₂
+        have h_left := ih₁ π₁ h_c₁_isSome (by rfl)
+        trans (c₁.substitute ρ).get h_c₁_isSome
+        · exact h_left
+        have h_x_in_vars₁ : v ∈ vars₁ := by
+          apply resolve_substitute_left c₁ c₂ ρ h_v_mem (by aesop) h_resolve_isSome
+        trans ((c₁.resolve c₂ v h_v_mem).substitute ρ).get h_resolve_isSome
+        swap
+        · aesop
+        unfold Clause.resolve Clause.substitute Clause.split Clause.shrink
+        simp only [Finset.mem_filter, Option.get_ite', Finset.mem_union, Finset.mem_erase, ne_eq]
+        intro l h_l
+        rw [Finset.mem_filterMap] at h_l
+        obtain ⟨l', ⟨h_l'_mem, h_l_eval⟩⟩ := h_l
+        rw [Finset.mem_filterMap]
+        have h_l'_neq : l' ≠ v.toLiteral h_v_mem := by
+          unfold Literal.variable Variable.toLiteral at *
+          aesop
+        use l'
+        simp only [Finset.mem_filter, Finset.mem_union, Finset.mem_erase, ne_eq,
+          Option.dite_none_right_eq_some, Option.some.injEq, and_exists_self]
+        use by aesop
+        aesop
+      case neg =>
+        simp only [h₂, ↓reduceDIte]
+        let h_some₁ := Option.isSome_iff_ne_none.mpr h₁
+        let h_some₂ := Option.isSome_iff_ne_none.mpr h₂
+        let c₁' := (c₁.substitute ρ).get h_some₁
+        let c₂' := (c₂.substitute ρ).get h_some₂
+        have h_left := ih₂ π₂ (Option.isSome_iff_ne_none.mpr h₂) (by rfl)
+        have h_right := ih₁ π₁ (Option.isSome_iff_ne_none.mpr h₁) (by rfl)
+
+        by_cases h_v : v ∈ vars₁
+        case neg =>
+          simp only [h_v, ↓reduceDIte]
+          trans ((Clause.resolve c₁ c₂ v h_v_mem).substitute ρ).get h_resolve_isSome
+          swap
+          · apply Clause.substitute_maintains_subset
+            assumption
+          have ih₁' : π₁.restrict_rhs ρ h_some₁ ⊆ c₁' := by aesop
+          have ih₂' : π₂.restrict_rhs ρ h_some₂ ⊆ c₂' := by aesop
+          trans (c₁'.resolve c₂' v (by aesop))
+          · apply Clause.resolve_maintains_subset
+            · assumption
+            · assumption
+          unfold c₁' c₂'
+          rw [Clause.substitute_resolve_eq_resolve_substitute]
+          assumption
+        case pos =>
+          simp only [h_v, ↓reduceDIte]
+          by_cases h_ρ : ρ v h_v
+          case pos =>
+            simp only [h_ρ, ↓reduceIte]
+            trans c₂'
+            · assumption
+            trans ((c₁.resolve c₂ v h_v_mem).substitute ρ).get h_resolve_isSome
+            swap
+            · aesop
+            unfold Clause.resolve Clause.substitute Clause.split Clause.shrink
+            intro l h_l
+            unfold c₂' at h_l
+            unfold Clause.substitute Clause.split Clause.shrink at h_l
+            simp_all only [Finset.mem_filter, Finset.mem_union, Finset.mem_erase, ne_eq,
+              Option.get_ite', Finset.mem_filterMap, Option.dite_none_right_eq_some,
+              Option.some.injEq, and_exists_self]
+            obtain ⟨l', ⟨h_l'_mem, h_l_eval⟩⟩ := h_l
+            use l'
+            use by
+              constructor
+              swap
+              · exact h_l'_mem.right
+              right
+              constructor
+              · unfold Literal.variable Variable.toNegLiteral at *
+                aesop
+              · exact h_l'_mem.left
+          case neg =>
+            simp only [h_ρ, Bool.false_eq_true, ↓reduceIte]
+            trans c₁'
+            · assumption
+            trans ((c₁.resolve c₂ v h_v_mem).substitute ρ).get h_resolve_isSome
+            swap
+            · aesop
+            unfold Clause.resolve Clause.substitute Clause.split Clause.shrink
+            intro l h_l
+            unfold c₁' at h_l
+            unfold Clause.substitute Clause.split Clause.shrink at h_l
+            simp_all only [Finset.mem_filter, Finset.mem_union, Finset.mem_erase, ne_eq,
+              Option.get_ite', Finset.mem_filterMap, Option.dite_none_right_eq_some,
+              Option.some.injEq, and_exists_self]
+            obtain ⟨l', ⟨h_l'_mem, h_l_eval⟩⟩ := h_l
+            use l'
+            use by
+              constructor
+              swap
+              · exact h_l'_mem.right
+              left
+              constructor
+              · unfold Literal.variable Variable.toLiteral at *
+                aesop
+              · exact h_l'_mem.left
+
+def TreeLikeResolution.convert_trivial {vars} {φ : CNFFormula vars} {c₁ c₂ : Clause vars}
+    (π : TreeLikeResolution φ c₁) (h_eq : c₁ = c₂) : TreeLikeResolution φ c₂ :=
+  match h : π with
+  | .axiom_clause h_in =>
+    .axiom_clause (by aesop)
+  | .resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res =>
+    .resolve c₁ c₂ v h_v_mem (by aesop) π₁ π₂ (by aesop)
+
+def TreeLikeResolution.restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
+    {C : Clause vars₂} (π : TreeLikeResolution φ C) (ρ : Assignment vars₁)
+    (h_some : (C.substitute ρ).isSome) :
+    TreeLikeResolution (φ.substitute ρ) (TreeLikeResolution.restrict_rhs π ρ h_some) :=
+  match h : π with
+  | .axiom_clause h_in =>
+    .axiom_clause (by
+      unfold TreeLikeResolution.restrict_rhs CNFFormula.substitute
+      aesop
+    )
+  | .resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res =>
+    have : Clause.resolve c₁ c₂ v h_v_mem ⊆ C := by
+      unfold Clause.resolve
+      refine Finset.union_subset_iff.mpr ?_
+      constructor
+      · refine Finset.subset_insert_iff.mp ?_
+        aesop
+      · refine Finset.subset_insert_iff.mp ?_
+        aesop
+    have h_resolve_isSome : ((Clause.resolve c₁ c₂ v h_v_mem).substitute ρ).isSome := by aesop
+    if h₁ : c₁.substitute ρ = none then
+      have : (c₂.substitute ρ).isSome := by
+        contrapose! h_resolve_isSome
+        simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff] at h_resolve_isSome
+        rw [←Option.isNone_iff_eq_none] at h₁
+        simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff]
+        exact Clause.resolve_substitute_isNone h_v_mem h₁ h_resolve_isSome
+      have h_eq : ((resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res).restrict_rhs ρ h_some) =
+          (π₂.restrict_rhs ρ this) := by
+        unfold restrict_rhs
+        simp only [h₁, ↓reduceDIte]
+        subst h
+        simp_all only [dite_eq_ite]
+        obtain ⟨left, right⟩ := h_res
+        split
+        next h_in => rfl
+        next c₁_1 c₂_1 v_1 h_v_mem_1 h_v_not_1 π₁_1 π₂
+          h_res =>
+          obtain ⟨left_1, right_1⟩ := h_res
+          rfl
+      (π₂.restrict ρ this).convert_trivial (by aesop)
+    else if h₂ : c₂.substitute ρ = none then
+      have : (c₁.substitute ρ).isSome := by
+        contrapose! h_resolve_isSome
+        simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff] at h_resolve_isSome
+        rw [←Option.isNone_iff_eq_none] at h₂
+        simp only [ne_eq, Bool.not_eq_true, Option.isSome_eq_false_iff]
+        exact Clause.resolve_substitute_isNone h_v_mem h_resolve_isSome h₂
+      have h_eq : ((resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res).restrict_rhs ρ h_some) =
+          (π₁.restrict_rhs ρ this) := by
+        unfold restrict_rhs
+        subst h
+        simp_all only [↓reduceDIte, dite_eq_ite]
+        simp_all only [Finset.union_singleton]
+        obtain ⟨left, right⟩ := h_res
+        split
+        next h_in => rfl
+        next c₁_1 c₂_1 v_1 h_v_mem_1 h_v_not_1 π₁ π₂_1
+          h_res =>
+          obtain ⟨left_1, right_1⟩ := h_res
+          rfl
+
+      (π₁.restrict ρ this).convert_trivial (by aesop)
+    else
+      if h_v : v ∈ vars₁ then
+        if h_ρ_v : ρ v h_v then
+          (π₂.restrict ρ (Option.isSome_iff_ne_none.mpr h₂)).convert_trivial (by
+            unfold TreeLikeResolution.restrict_rhs
+            aesop
+          )
+        else
+          (π₁.restrict ρ (Option.isSome_iff_ne_none.mpr h₁)).convert_trivial (by
+            unfold TreeLikeResolution.restrict_rhs
+            aesop
+          )
+      else
+        let c₁'_rhs := π₁.restrict_rhs ρ (Option.isSome_iff_ne_none.mpr h₁)
+        let c₂'_rhs := π₂.restrict_rhs ρ (Option.isSome_iff_ne_none.mpr h₂)
+        let c₁' := (c₁.substitute ρ).get (Option.isSome_iff_ne_none.mpr h₁)
+        let c₂' := (c₂.substitute ρ).get (Option.isSome_iff_ne_none.mpr h₂)
+
+        have h_π₁ : c₁'_rhs ⊆ c₁' := by
+          exact restrict_rhs_subset_substitute π₁ ρ (Option.isSome_iff_ne_none.mpr h₁)
+        have h_π₂ : c₂'_rhs ⊆ c₂' := by
+          exact restrict_rhs_subset_substitute π₂ ρ (Option.isSome_iff_ne_none.mpr h₂)
+        have h_v_notMem_resolve : v ∉
+            ((resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res).restrict_rhs ρ h_some).variables := by
+          unfold TreeLikeResolution.restrict_rhs
+          simp only [h₁, h₂, h_v, ↓reduceDIte]
+          unfold Clause.variables
+          simp only [Finset.mem_image, not_exists, not_and]
+          intro l l_in
+
+          have h_l_in_resolve : l ∈ (c₁'.resolve c₂' v (by aesop)) := by
+            apply Clause.resolve_maintains_subset (by aesop) h_π₁ h_π₂
+            assumption
+          have : l ∈ ((Clause.resolve c₁ c₂ v h_v_mem).substitute ρ).get h_resolve_isSome := by
+            rw [←Clause.substitute_resolve_eq_resolve_substitute]
+            assumption
+          have : l ∈ (C.substitute ρ).get (by aesop) := by
+            apply Clause.substitute_maintains_subset
+            · assumption
+            · assumption
+          have h_C_subst_variables : ((C.substitute ρ).get (by assumption)).variables =
+              C.variables \ vars₁ := by simp
+
+          by_contra! h_l_var
+          have : v ∈ ((C.substitute ρ).get (by assumption)).variables := by
+            rw [←h_l_var]
+            apply literal_in_clause_variables
+            assumption
+
+          simp only [Clause.substitute_variables, Finset.mem_sdiff] at this
+          tauto
+
+        (TreeLikeResolution.resolve c₁'_rhs c₂'_rhs v (by aesop) h_v_notMem_resolve)
+          (π₁.restrict ρ (Option.isSome_iff_ne_none.mpr h₁))
+          (π₂.restrict ρ (Option.isSome_iff_ne_none.mpr h₂)) (by
+          unfold TreeLikeResolution.restrict_rhs
+          simp only [h₁, h₂, h_v, ↓reduceDIte]
+          constructor
+          · apply Clause.resolve_satisfies_h_resolve_left
+          · apply Clause.resolve_satisfies_h_resolve_right
+        )
 
 lemma resolution_restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
     (h_subs : vars₁ ⊆ vars₂) (ρ : Assignment vars₁)
@@ -170,18 +549,26 @@ lemma resolution_restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂
       ∃ c', c' ⊆ c_res ∧
       ∃ (π' : TreeLikeResolution (φ.substitute ρ) c'),
         π'.width ≤ π.width ∧ π'.size ≤ π.size) := by
-  induction π with
-  | axiom_clause h_in =>
-      -- Look at c.substitute ρ.
-      -- If none, return Or.inl.
-      -- If some c_res, c_res is in the new formula by definition of CNFFormula.substitute.
-      unfold Clause.substitute
-      sorry
-  | resolve c₁ c₂ v h_v_mem h_v_not_mem π₁ π₂ h_res ih₁ ih₂ =>
-      -- Check if v ∈ vars₁ (assigned) or v ∉ vars₁ (unassigned).
-      -- If assigned, one of ih₁ or ih₂ will evaluate to `none`, and the other
-      -- will shrink and bypass the resolution step entirely!
-      -- If unassigned, apply resolution to the results of ih₁ and ih₂.
+  if h_none : C.substitute ρ = none then
+    left
+    assumption
+  else
+    right
+    have : ∃ c_res, C.substitute ρ = some c_res := by
+      use (C.substitute ρ).get (by exact Option.isSome_iff_ne_none.mpr h_none)
+      aesop
+    obtain ⟨c_res, h_some⟩ := this
+    use c_res
+    constructor
+    · assumption
+    use π.restrict_rhs ρ (by aesop)
+    constructor
+    · let w := (C.substitute ρ).get (by aesop)
+      trans w
+      · apply TreeLikeResolution.restrict_rhs_subset_substitute π ρ
+      · aesop
+    · let π' := π.restrict ρ (Option.isSome_of_mem h_some)
+      use π'
       sorry
 
 -- lemma width_and_size_respect_substitution {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
