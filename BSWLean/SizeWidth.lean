@@ -1196,7 +1196,7 @@ lemma eliminate_vacuous_resolutions {vars} {φ : CNFFormula vars} -- {c : Clause
 
   have : ∃ (c' : Clause vars) (π' : TreeLikeResolution φ c'), (c' ⊆ (BotClause vars)) ∧
       IsRegularRes π' ∧ π'.size ≤ π.size := by
-    exact eliminate_vacuous_resolutions_prep π
+    exact resolution_regularize π
   obtain ⟨c', h_π⟩ := this
   obtain ⟨π', h_π⟩ := h_π
   have idea : c' = (BotClause vars) := by

@@ -355,8 +355,8 @@ lemma TreeLikeResolution.unsubstitute_size {vars sub_vars} {φ : CNFFormula vars
     unfold unsubstitute size
     linarith
 
-def TreeLikeResolution.convert {vars} {φ : CNFFormula vars} {c : Clause vars}
-    (π : TreeLikeResolution φ c) (c' : Clause vars) (h : c = c') : TreeLikeResolution φ c' :=
+def TreeLikeResolution.convert {vars} {φ : CNFFormula vars} {c c' : Clause vars}
+    (π : TreeLikeResolution φ c) (h : c = c') : TreeLikeResolution φ c' :=
   match h_match : π with
   | .axiom_clause h =>
     TreeLikeResolution.axiom_clause (by aesop)
@@ -365,7 +365,7 @@ def TreeLikeResolution.convert {vars} {φ : CNFFormula vars} {c : Clause vars}
 
 lemma TreeLikeResolution.convert_size {vars} {φ : CNFFormula vars} {c : Clause vars}
     (π : TreeLikeResolution φ c) (c' : Clause vars) (h : c = c') :
-    (π.convert c' h).size = π.size := by
+    (π.convert h).size = π.size := by
   unfold TreeLikeResolution.convert
   aesop
 
@@ -585,7 +585,7 @@ theorem unsat_implies_tree_like_refutation {vars} {φ : CNFFormula vars}
     by_cases c_true = ∅
     case pos h_true_empty =>
       unfold c_true at h_true_empty
-      let π' := π_true_lifted.convert ∅ h_true_empty
+      let π' := π_true_lifted.convert h_true_empty
       use π'
       rw [TreeLikeResolution.convert_size]
       grind
@@ -593,7 +593,7 @@ theorem unsat_implies_tree_like_refutation {vars} {φ : CNFFormula vars}
       by_cases c_false = ∅
       case pos h_empty =>
         unfold c_false at h_empty
-        let π' := π_false_lifted.convert ∅ h_empty
+        let π' := π_false_lifted.convert h_empty
         use π'
         rw [TreeLikeResolution.convert_size]
         grind
