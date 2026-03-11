@@ -541,9 +541,116 @@ def TreeLikeResolution.restrict {vars₁ vars₂ : Variables} {φ : CNFFormula v
           · apply Clause.resolve_satisfies_h_resolve_right
         )
 
+@[simp]
+lemma TreeLikeResolution.convert_trivial_size {vars} {φ : CNFFormula vars} {c₁ c₂ : Clause vars}
+    (π : TreeLikeResolution φ c₁) (h_eq : c₁ = c₂) : (π.convert_trivial h_eq).size = π.size := by
+  unfold TreeLikeResolution.convert_trivial TreeLikeResolution.size
+  aesop
+
+@[simp]
+lemma TreeLikeResolution.convert_trivial_width {vars} {φ : CNFFormula vars} {c₁ c₂ : Clause vars}
+    (π : TreeLikeResolution φ c₁) (h_eq : c₁ = c₂) : (π.convert_trivial h_eq).width = π.width := by
+  unfold TreeLikeResolution.convert_trivial TreeLikeResolution.width
+  aesop
+
+@[simp]
+lemma resolution_restrict_size {vars sub_vars} {φ : CNFFormula vars} {c : Clause vars}
+    (π : TreeLikeResolution φ c) (ρ : Assignment sub_vars) (h_some) :
+    (π.restrict ρ h_some).size ≤ π.size := by
+  induction π
+  case axiom_clause => aesop
+  case resolve c c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res ih₁ ih₂ =>
+    unfold TreeLikeResolution.restrict
+    trans 1 + π₁.size + π₂.size
+    swap
+    · aesop
+
+    if h₁ : c₁.substitute ρ = none then
+      simp only [h₁, ↓reduceDIte]
+      trans π₂.size
+      · aesop
+      · omega
+    else if h₂ : c₂.substitute ρ = none then
+      simp only [h₂, ↓reduceDIte]
+      trans π₁.size
+      · aesop
+      · omega
+    else
+      simp only [h₁, h₂, ↓reduceDIte]
+      if h_v : v ∈ sub_vars then
+        if h_ρ_v : ρ v h_v then
+          simp only [h_v, h_ρ_v, ↓reduceDIte]
+          trans π₂.size
+          · aesop
+          · omega
+        else
+          simp only [h_v, h_ρ_v, ↓reduceDIte]
+          trans π₁.size
+          · aesop
+          · omega
+      else
+        simp only [h_v, ↓reduceDIte, TreeLikeResolution.size]
+        have h_π₁ : (π₁.restrict ρ (Option.isSome_iff_ne_none.mpr h₁)).size ≤ π₁.size := by aesop
+        have h_π₂ : (π₂.restrict ρ (Option.isSome_iff_ne_none.mpr h₂)).size ≤ π₂.size := by aesop
+        omega
+
+lemma max_inequality {x x' y y' z z' : ℕ} (h_x : x ≤ x') (h_y : y ≤ y') (h_z : z ≤ z') :
+    max x (max y z) ≤ max x' (max y' z') := by grind
+
+@[simp]
+lemma resolution_restrict_width {vars sub_vars} {φ : CNFFormula vars} {c : Clause vars}
+    (π : TreeLikeResolution φ c) (ρ : Assignment sub_vars) (h_some) :
+    (π.restrict ρ h_some).width ≤ π.width := by
+  have h_c_card : ((c.substitute ρ).get h_some).card ≤ c.card := by aesop
+
+  induction π
+  case axiom_clause c h => aesop
+  case resolve c c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res ih₁ ih₂ =>
+    unfold TreeLikeResolution.restrict
+    trans max c.card (max π₁.width π₂.width)
+    swap
+    · simp [TreeLikeResolution.width]
+
+    if h₁ : c₁.substitute ρ = none then
+      simp only [h₁, ↓reduceDIte]
+      trans π₂.width
+      · aesop
+      · omega
+    else if h₂ : c₂.substitute ρ = none then
+      simp only [h₂, ↓reduceDIte]
+      trans π₁.width
+      · aesop
+      · omega
+    else
+      simp only [h₁, h₂, ↓reduceDIte]
+      if h_v : v ∈ sub_vars then
+        if h_ρ_v : ρ v h_v then
+          simp only [h_v, h_ρ_v, ↓reduceDIte]
+          trans π₂.width
+          · aesop
+          · omega
+        else
+          simp only [h_v, h_ρ_v, ↓reduceDIte]
+          trans π₁.width
+          · aesop
+          · omega
+      else
+        simp only [h_v, ↓reduceDIte, TreeLikeResolution.width]
+        have h_π₁ : (π₁.restrict ρ (Option.isSome_iff_ne_none.mpr h₁)).width ≤ π₁.width := by aesop
+        have h_π₂ : (π₂.restrict ρ (Option.isSome_iff_ne_none.mpr h₂)).width ≤ π₂.width := by aesop
+        apply max_inequality
+        · trans ((c.substitute ρ).get h_some).card
+          · apply Finset.card_le_card
+            exact
+              TreeLikeResolution.restrict_rhs_subset_substitute
+                (TreeLikeResolution.resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res) ρ h_some
+          · assumption
+        · assumption
+        · assumption
+
+
 lemma resolution_restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
-    (h_subs : vars₁ ⊆ vars₂) (ρ : Assignment vars₁)
-    {C : Clause vars₂} (π : TreeLikeResolution φ C) :
+    (ρ : Assignment vars₁) {C : Clause vars₂} (π : TreeLikeResolution φ C) :
     (C.substitute ρ = none) ∨
     (∃ c_res, C.substitute ρ = some c_res ∧
       ∃ c', c' ⊆ c_res ∧
@@ -569,7 +676,7 @@ lemma resolution_restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂
       · aesop
     · let π' := π.restrict ρ (Option.isSome_of_mem h_some)
       use π'
-      sorry
+      aesop
 
 -- lemma width_and_size_respect_substitution {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
 --     (x : Literal vars₂) (h₀ : x.variable ∈ vars₂) (h_subs : vars₁ ⊆ vars₂)

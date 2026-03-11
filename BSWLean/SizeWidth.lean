@@ -1324,7 +1324,7 @@ theorem width_imply_size_ind_version (W : ℕ)
                 ∃ c', c' ⊆ c_res ∧
                 ∃ (π' : TreeLikeResolution (φ.substitute ρ_true) c'),
                   π'.width ≤ π₂.width ∧ π'.size ≤ π₂.size) := by
-              exact resolution_restrict h_v_sub ρ_true π₂
+              exact resolution_restrict ρ_true π₂
             have temp_fact : c₂ = ({v'.toNegLiteral h_v_in_vars} : Clause s) := by
               have idea₁ : v' ∈ c₂.variables := by
                 unfold IsRegularRes at h_reg
@@ -1379,7 +1379,7 @@ theorem width_imply_size_ind_version (W : ℕ)
                 ∃ c', c' ⊆ c_res ∧
                 ∃ (π' : TreeLikeResolution (φ.substitute ρ_false) c'),
                   π'.width ≤ π₁.width ∧ π'.size ≤ π₁.size) := by
-              exact resolution_restrict h_v_sub ρ_false π₁
+              exact resolution_restrict ρ_false π₁
             have temp_fact : c₁ = ({v'.toLiteral h_v_in_vars} : Clause s) := by
               have idea₁ : v' ∈ c₁.variables := by
                 unfold IsRegularRes at h_reg

@@ -380,6 +380,13 @@ lemma Clause.substitute_variables {vars sub_vars} {c : Clause vars} (ρ : Assign
     unfold Literal.restrict Literal.variable at *
     aesop
 
+@[aesop unsafe]
+lemma Clause.substitute_card_leq_card {vars sub_vars} {c : Clause vars} {ρ : Assignment sub_vars}
+    (h) : ((c.substitute ρ).get h).card ≤ c.card := by
+  unfold Clause.substitute Clause.split Clause.shrink
+  simp only [Finset.mem_filter, Option.get_ite']
+  sorry
+
 lemma Clause.substitute_resolve_eq_resolve_substitute {vars sub_vars} {c₁ c₂ : Clause vars}
     (ρ : Assignment sub_vars) (v : Variable) (h_v : v ∈ vars \ sub_vars) (h₁) (h₂)
     (h_res : ((c₁.resolve c₂ v (by
