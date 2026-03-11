@@ -678,42 +678,6 @@ lemma resolution_restrict {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂
       use π'
       aesop
 
--- lemma width_and_size_respect_substitution {vars₁ vars₂ : Variables} {φ : CNFFormula vars₂}
---     (x : Literal vars₂) (h₀ : x.variable ∈ vars₂) (h_subs : vars₁ ⊆ vars₂)
---     (ρ : (Assignment vars₁))
---     (W : ℕ) (S : ℕ)
---     (π : TreeLikeResolution φ (BotClause vars₂)) (h_width : π.width ≤ W) (h_size : π.size ≤ S) :
---     ∃ (π_1 : TreeLikeResolution (φ.substitute ρ) (BotClause (vars₂ \ vars₁))), (π_1.width ≤ W ∧ π_1.size ≤ S) := by
-
---   -- 1. Apply the generalized induction lemma
---   have h_gen := resolution_restrict h_subs ρ π
-
---   -- 2. Handle the two cases from the generalized lemma
---   rcases h_gen with h_none | ⟨c_res, h_some, c', h_subset, π', h_w, h_s⟩
-
---   · -- Case 1: BotClause was satisfied (Impossible)
---     -- You will need a helper lemma: `BotClause.substitute ρ ≠ none`
---     -- Once you have it, this branch closes by contradiction.
---     sorry
-
---   · -- Case 2: We got a restricted proof
---     -- You need a helper lemma showing that `BotClause.substitute ρ = some (BotClause (vars₂ \ vars₁))`
---     -- From `h_some`, you can deduce `c_res = BotClause (vars₂ \ vars₁)`
---     -- From `h_subset`, `c' ⊆ BotClause (vars₂ \ vars₁)`, meaning `c' = BotClause (vars₂ \ vars₁)`
-
-
---     have : c' = BotClause (vars₂ \ vars₁) :=
---       sorry
---     subst c'
---     -- Once you rewrite c' to BotClause, π' is exactly the TreeLikeRefutation you need!
---     use π'  -- Wait to do this until Lean sees π' derives BotClause
-
---     -- Prove the bounds using transitivity
---     constructor
---     · exact Nat.le_trans h_w h_width
---     · exact Nat.le_trans h_s h_size
-
-
 lemma substitute_trivial_property {vars}
     (φ : CNFFormula vars)
     (x : Literal vars) (h₀ : x.variable ∈ vars)
@@ -777,8 +741,9 @@ lemma weaken_proof {vars} {φ : CNFFormula vars} {c c' : Clause vars}
   | resolve c₁ c₂ v h_v_mem h_v_not π₁ π₂ h_res ih₁ ih₂ => sorry
 
 lemma eliminate_vacuous_resolutions_prep {vars} {φ : CNFFormula vars} {c : Clause vars}
-    (π : TreeLikeResolution φ c):
-    ∃ (c' : Clause vars) (π' : TreeLikeResolution φ c'), (c' ⊆ c) ∧ IsRegularRes π' ∧ π'.size ≤ π.size := by
+    (π : TreeLikeResolution φ c) :
+    ∃ (c' : Clause vars) (π' : TreeLikeResolution φ c'),
+      (c' ⊆ c) ∧ IsRegularRes π' ∧ π'.size ≤ π.size := by
   induction π with
   | axiom_clause h_in =>
       -- Base case is trivially regular
