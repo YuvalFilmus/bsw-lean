@@ -1,5 +1,15 @@
 import BSWLean.CNF
 
+/-!
+# Conversion of assignments into clauses
+
+The negation of assignment is a clause.
+
+This file provides all necessary definitions to make this conversion.
+-/
+
+/-- Takes assignment `ρ`, variable `v` and produce a literal contradicting `ρ`, if `v` happens
+to be in the preimage of `ρ`. -/
 def Assignment.negVariable {vars} (ρ : Assignment vars) (v : Variable) : Option (Literal vars) :=
   if h_v_mem_vars : v ∈ vars then
     if ρ v h_v_mem_vars then
@@ -33,6 +43,7 @@ lemma Assignment.negVariable_some_iff_variable_in_vars {vars} {ρ : Assignment v
 
   aesop
 
+/-- The assignment to clause conversion function. -/
 def Assignment.toClause {vars} (ρ : Assignment vars) : Clause vars :=
   vars.filterMap (ρ.negVariable) (by exact fun a a' b a_1 a_2 ↦ negVariable_inj a_1 a_2)
 
@@ -103,3 +114,5 @@ lemma Assignment.toClause_variables {vars} (ρ : Assignment vars) : ρ.toClause.
   case mp =>
     intro a
     aesop
+
+#lint
